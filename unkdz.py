@@ -34,7 +34,8 @@ class KDZFileTools:
 	outdir = "kdzextracted"
 	infile = None
 
-	kdz_header = "\x28\x05\x00\x00\x34\x31\x25\x80"
+	kdz_header = "\x28\x05\x00\x00"
+	kdz_header2 = { "\x34\x31\x25\x80": "1", "\x24\x38\x22\x25": "2" }
 	kdz_sub_len = 272
 
 	# Format string dict
@@ -167,11 +168,17 @@ class KDZFileTools:
 		self.infile.seek(0)
 
 		# Verify KDZ header
-		verify_header = self.infile.read(8)
+		verify_header = self.infile.read(4)
 		if verify_header != self.kdz_header:
 			print "[!] Error: Unsupported KDZ file format."
 			print "[ ] Expected: %s ,\n\tbut received %s ." % (" ".join(hex(ord(n)) for n in self.kdz_header), " ".join(hex(ord(n)) for n in verify_header))
 			sys.exit(0)
+		verify_header = self.infile.read(4)
+		if verify_header not in self.kdz_header2:
+			print "[!] Error: Unsupported KDZ file format."
+			print "[ ] Bad second header,\n\treceived %s ." % (" ".join(hex(ord(n)) for n in verify_header))
+			sys.exit(0)
+
 
 	def cmdExtractSingle(self, partID):
 		print "[+] Extracting single partition!\n"
