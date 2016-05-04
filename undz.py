@@ -212,6 +212,9 @@ class DZFileTools:
 		self.openFile(args.dzfile)
 		self.partList = self.getPartitions()
 
+		if "outdir" in args:
+		  self.outdir = args.outdir
+
 		if args.listOnly:
 		  self.cmdListPartitions()
 
