@@ -20,6 +20,7 @@ Copyright (C) 2013 IOMonster (thecubed on XDA)
 
 import zlib
 import os
+import sys
 import argparse
 from struct import *
 from collections import OrderedDict
@@ -33,8 +34,8 @@ class DZFileTools:
 	partitions = []
 	outdir = "dzextracted"
 
-	dz_header = "\x32\x96\x18\x74"
-	dz_sub_header = "\x30\x12\x95\x78"
+	dz_header = b"\x32\x96\x18\x74"
+	dz_sub_header = b"\x30\x12\x95\x78"
 	dz_sub_len = 512
 
 	# Format string dict
@@ -44,23 +45,23 @@ class DZFileTools:
 	# Example:
 	#   ('itemName', ('formatString', collapse))
 	dz_sub_dict = OrderedDict([
-	  ('header'  , ('4s', False)),
-	  ('type'    , ('32s', True)),
-	  ('name'    , ('64s', True)),
-	  ('unknown' , ('I', False)),
-	  ('length'  , ('I', False)),
-	  ('checksum', ('16s', False)),
-	  ('spacer1' , ('I', False)),
-	  ('spacer2' , ('I', False)),
-	  ('spacer3' , ('I', False)),
-	  ('pad'     , ('376s', True))
-	  ])
+	  ('header',   ('4s',   False)),
+	  ('type',     ('32s',  True)),
+	  ('name',     ('64s',  True)),
+	  ('unknown0', ('I',    False)),
+	  ('length',   ('I',    False)),
+	  ('md5',      ('16s',  False)),
+	  ('unknown1', ('I',    False)),
+	  ('unknown2', ('I',    False)),
+	  ('unknown3', ('I',    False)),
+	  ('pad',      ('376s', True)),
+	])
 
 	# Generate the formatstring for struct.unpack()
 	dz_formatstring = " ".join([x[0] for x in dz_sub_dict.values()])
 
 	# Generate list of items that can be collapsed (truncated)
-	dz_collapsibles = zip(dz_sub_dict.keys(), [x[1] for x in dz_sub_dict.values()])
+	dz_collapsibles = [n for n, (y, p) in dz_sub_dict.items() if p]
 
 
 	def readDZHeader(self):
@@ -78,9 +79,9 @@ class DZFileTools:
 		# and apply the format to the buffer
 		dz_item = dict(
 			zip(
-			  self.dz_sub_dict.keys(),
-			  unpack(self.dz_formatstring,buf)
-			  )
+				self.dz_sub_dict.keys(),
+				unpack(self.dz_formatstring,buf)
+			)
 		)
 
 		# Add an "offset" key to the dict
@@ -89,8 +90,15 @@ class DZFileTools:
 
 		# Collapse (truncate) each key's value if it's listed as collapsible
 		for key in self.dz_collapsibles:
-			if key[1] == True:
-				dz_item[key[0]] = dz_item[key[0]].strip("\x00")
+			dz_item[key] = dz_item[key].rstrip(b'\x00')
+			if b'\x00' in dz_item[key]:
+				print("[!] Error: extraneous data found IN "+key)
+				sys.exit(1)
+
+		# Verify DZ sub-header
+		if dz_item['header'] != self.dz_sub_header:
+			print("[!] Bad DZ sub header!")
+			sys.exit(1)
 
 		return dz_item
 
@@ -103,11 +111,6 @@ class DZFileTools:
 
 			# Read each segment's header
 			dz_sub = self.readDZHeader()
-
-			# Verify DZ sub-header
-			if dz_sub['header'] != self.dz_sub_header:
-				print "[!] Bad DZ sub header!"
-				sys.exit(0)
 
 			# Append it to our list
 			self.partitions.append(dz_sub)
@@ -149,7 +152,7 @@ class DZFileTools:
 			os.makedirs(self.outdir)
 
 		# Open the new file for writing
-		outfile = open(os.path.join(self.outdir,currentPartition['name']), 'wb')
+		outfile = open(os.path.join(self.outdir,currentPartition['name'].decode("utf8")), 'wb')
 
 		# Read the whole compressed segment into RAM
 		zdata = self.infile.read(currentPartition['length'])
@@ -184,27 +187,27 @@ class DZFileTools:
 		# Verify DZ header
 		verify_header = self.infile.read(4)
 		if verify_header != self.dz_header:
-			print "[!] Error: Unsupported DZ file format."
-			print "[ ] Expected: %s ,\n\tbut received %s ." % (" ".join(hex(ord(n)) for n in self.dz_header), " ".join(hex(ord(n)) for n in verify_header))
-			sys.exit(0)
+			print("[!] Error: Unsupported DZ file format.")
+			print("[ ] Expected: %s ,\n\tbut received %s ." % (" ".join(hex(n) for n in self.dz_header), " ".join(hex(n) for n in verify_header)))
+			sys.exit(1)
 
 		# Skip to end of DZ header
 		self.infile.seek(512)
 
 	def cmdListPartitions(self):
-		print "[+] DZ Partition List\n========================================="
+		print("[+] DZ Partition List\n=========================================")
 		for part in enumerate(self.partList):
-			print "%2d : %s (%d bytes)" % (part[0], part[1][0], part[1][1])
+			print("%2d : %s (%d bytes)" % (part[0], part[1][0].decode("utf8"), part[1][1]))
 
 	def cmdExtractSingle(self, partID):
-		print "[+] Extracting single partition!\n"
-		print "[+] Extracting " + str(self.partList[partID][0]) + " to " + os.path.join(self.outdir,self.partList[partID][0])
+		print("[+] Extracting single partition!\n")
+		print("[+] Extracting " + str(self.partList[partID][0]) + " to " + os.path.join(self.outdir,self.partList[partID][0]))
 		self.extractPartition(partID)
 
 	def cmdExtractAll(self):
-		print "[+] Extracting all partitions!\n"
+		print("[+] Extracting all partitions!\n")
 		for part in enumerate(self.partList):
-			print "[+] Extracting " + str(part[1][0]) + " to " + os.path.join(self.outdir,part[1][0])
+			print("[+] Extracting " + part[1][0].decode("utf8") + " to " + os.path.join(self.outdir,part[1][0].decode("utf8")))
 			self.extractPartition(part[0])
 
 	def main(self):
@@ -213,16 +216,16 @@ class DZFileTools:
 		self.partList = self.getPartitions()
 
 		if "outdir" in args:
-		  self.outdir = args.outdir
+			self.outdir = args.outdir
 
 		if args.listOnly:
-		  self.cmdListPartitions()
+			self.cmdListPartitions()
 
-		elif args.extractID >= 0:
-		  self.cmdExtractSingle(args.extractID)
+		elif args.extractID and args.extractID >= 0:
+			self.cmdExtractSingle(args.extractID)
 
 		elif args.extractAll:
-		  self.cmdExtractAll()
+			self.cmdExtractAll()
 
 
 if __name__ == "__main__":
