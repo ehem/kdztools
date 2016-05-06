@@ -34,8 +34,8 @@ class KDZFileTools:
 	outdir = "kdzextracted"
 	infile = None
 
-	kdz_header = "\x28\x05\x00\x00"
-	kdz_header2 = { "\x34\x31\x25\x80": "1", "\x24\x38\x22\x25": "2" }
+	kdz_header = b"\x28\x05\x00\x00"
+	kdz_header2 = { b"\x34\x31\x25\x80": "1", b"\x24\x38\x22\x25": "2" }
 	kdz_sub_len = 272
 
 	# Format string dict
@@ -45,19 +45,19 @@ class KDZFileTools:
 	# Example:
 	#   ('itemName', ('formatString', collapse))
 	kdz_sub_dict = OrderedDict([
-	  ('name'   , ('32s', True)),
-	  ('pad'    , ('224s', True)),
-	  ('length' , ('I', False)),
-	  ('unknow1', ('I', False)),
-	  ('offset' , ('I', False)),
-	  ('unknow2', ('I', False))
-	  ])
+	  ('name',    ('32s',  True)),
+	  ('pad',     ('224s', True)),
+	  ('length',  ('I',    False)),
+	  ('unknow1', ('I',    False)),
+	  ('offset',  ('I',    False)),
+	  ('unknow2', ('I',    False))
+	])
 
 	# Generate the formatstring for struct.unpack()
 	kdz_formatstring = " ".join([x[0] for x in kdz_sub_dict.values()])
 
 	# Generate list of items that can be collapsed (truncated)
-	kdz_collapsibles = zip(kdz_sub_dict.keys(), [x[1] for x in kdz_sub_dict.values()])
+	kdz_collapsibles = [x[0] for x in kdz_sub_dict.items() if x[1][1]]
 
 	def readKDZHeader(self):
 		"""
@@ -74,15 +74,17 @@ class KDZFileTools:
 		# and apply the format to the buffer
 		kdz_item = dict(
 			zip(
-			  self.kdz_sub_dict.keys(),
-			  unpack(self.kdz_formatstring,buf)
-			  )
+				self.kdz_sub_dict.keys(),
+				unpack(self.kdz_formatstring,buf)
+			)
 		)
 
 		# Collapse (truncate) each key's value if it's listed as collapsible
 		for key in self.kdz_collapsibles:
-			if key[1] == True:
-				kdz_item[key[0]] = kdz_item[key[0]].strip("\x00")
+			kdz_item[key] = kdz_item[key].rstrip(b'\x00')
+			if b'\x00' in kdz_item[key]:
+				print("[!] Error: extraneous data found IN "+key)
+				sys.exit(1)
 
 		return kdz_item
 
@@ -99,7 +101,7 @@ class KDZFileTools:
 			self.partitions.append(kdz_sub)
 
 			# Is there another KDZ header?
-			if self.infile.read(4) == "\x00\x00\x00\x00":
+			if self.infile.read(4) == b"\x00\x00\x00\x00":
 				break
 
 			# Rewind file pointer 4 bytes
@@ -123,7 +125,7 @@ class KDZFileTools:
 			os.makedirs(self.outdir)
 
 		# Open the new file for writing
-		outfile = open(os.path.join(self.outdir,currentPartition['name']), 'wb')
+		outfile = open(os.path.join(self.outdir,currentPartition['name'].decode("utf8")), 'wb')
 
 		# Use 1024 byte chunks
 		chunkSize = 1024
@@ -170,31 +172,31 @@ class KDZFileTools:
 		# Verify KDZ header
 		verify_header = self.infile.read(4)
 		if verify_header != self.kdz_header:
-			print "[!] Error: Unsupported KDZ file format."
-			print "[ ] Expected: %s ,\n\tbut received %s ." % (" ".join(hex(ord(n)) for n in self.kdz_header), " ".join(hex(ord(n)) for n in verify_header))
-			sys.exit(0)
+			print("[!] Error: Unsupported KDZ file format.")
+			print("[ ] Expected: %s ,\n\tbut received %s ." % (" ".join(hex(n) for n in self.kdz_header), " ".join(hex(n) for n in verify_header)))
+			sys.exit(1)
 		verify_header = self.infile.read(4)
 		if verify_header not in self.kdz_header2:
-			print "[!] Error: Unsupported KDZ file format."
-			print "[ ] Bad second header,\n\treceived %s ." % (" ".join(hex(ord(n)) for n in verify_header))
-			sys.exit(0)
+			print("[!] Error: Unsupported KDZ file format.")
+			print("[ ] Bad second header,\n\treceived %s ." % (" ".join(hex(n) for n in verify_header)))
+			sys.exit(1)
 
 
 	def cmdExtractSingle(self, partID):
-		print "[+] Extracting single partition!\n"
-		print "[+] Extracting " + str(self.partList[partID][0]) + " to " + os.path.join(self.outdir,self.partList[partID][0])
+		print("[+] Extracting single partition!\n")
+		print("[+] Extracting " + str(self.partList[partID][0]) + " to " + os.path.join(self.outdir,self.partList[partID][0].decode("utf8")))
 		self.extractPartition(partID)
 
 	def cmdExtractAll(self):
-		print "[+] Extracting all partitions!\n"
+		print("[+] Extracting all partitions!\n")
 		for part in enumerate(self.partList):
-			print "[+] Extracting " + str(part[1][0]) + " to " + os.path.join(self.outdir,part[1][0])
+			print("[+] Extracting " + part[1][0].decode("utf8") + " to " + os.path.join(self.outdir,part[1][0].decode("utf8")))
 			self.extractPartition(part[0])
 
 	def cmdListPartitions(self):
-		print "[+] KDZ Partition List\n========================================="
+		print("[+] KDZ Partition List\n=========================================")
 		for part in enumerate(self.partList):
-			print "%2d : %s (%d bytes)" % (part[0], part[1][0], part[1][1])
+			print("%2d : %s (%d bytes)" % (part[0], part[1][0].decode("utf8"), part[1][1]))
 
 	def main(self):
 		args = self.parseArgs()
@@ -202,16 +204,16 @@ class KDZFileTools:
 		self.partList = self.getPartitions()
 
 		if "outdir" in args:
-		  self.outdir = args.outdir
+			self.outdir = args.outdir
 
 		if args.listOnly:
-		  self.cmdListPartitions()
+			self.cmdListPartitions()
 
-		elif args.extractID >= 0:
-		  self.cmdExtractSingle(args.extractID)
+		elif args.extractID and args.extractID >= 0:
+			self.cmdExtractSingle(args.extractID)
 
 		elif args.extractAll:
-		  self.cmdExtractAll()
+			self.cmdExtractAll()
 
 if __name__ == "__main__":
 	kdztools = KDZFileTools()
