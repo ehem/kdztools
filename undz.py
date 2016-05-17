@@ -23,6 +23,7 @@ import sys
 import io
 import zlib
 import argparse
+import hashlib
 from struct import unpack
 from collections import OrderedDict
 from binascii import crc32
@@ -72,7 +73,7 @@ class DZChunk:
 		"""
 		Return the name of the slice we're located in
 		"""
-		return self.sliceName
+		return self.sliceName.decode("utf8")
 
 	def getLength(self):
 		"""
@@ -152,7 +153,14 @@ class DZChunk:
 		crc = crc32(buf) & 0xFFFFFFFF
 
 		if crc != self.crc32:
-			print("[!] Error CRC32 of data doesn't match header ({:08X} vs {:08X})".format(crc, self.crc32))
+			print("[!] Error: CRC32 of data doesn't match header ({:08X} vs {:08X})".format(crc, self.crc32))
+			sys.exit(1)
+
+		md5 = hashlib.md5()
+		md5.update(buf)
+
+		if md5.digest() != self.md5:
+			print("[!] Error: MD5 of data doesn't match header ({:032X} vs {:032X})".format(md5.digest(), self.md5))
 			sys.exit(1)
 
 		# Print our messages
@@ -317,6 +325,12 @@ class DZSlice:
 		"""
 		return len(self.chunks)
 
+	def getSliceName(self):
+		"""
+		Get the name of our slice
+		"""
+		return self.chunks[0].getSliceName()
+
 	def extractChunk(self, file, name, idx):
 		"""
 		Extract a given chunk
@@ -327,7 +341,12 @@ class DZSlice:
 		"""
 		Extract the whole slice to the FileIO file named name
 		"""
-		raise("to be implemented")
+
+		cur = self.getStart()
+		for chunk in self.chunks:
+			file.seek(chunk.getTargetStart()-cur, io.SEEK_CUR)
+			chunk.extract(file, name)
+			cur = chunk.getTargetEnd()
 
 	def __init__(self, name):
 		"""
@@ -398,7 +417,7 @@ class DZFile:
 
 	def open(self, file):
 		"""
-		Do what you expect, open file and check the header
+		What do you expect? Open file and check the header
 		"""
 
 		# Open the file
@@ -408,15 +427,17 @@ class DZFile:
 		self.length = self.dzfile.seek(0, io.SEEK_END)
 		self.dzfile.seek(0, io.SEEK_SET)
 
+		# Save the full header for rebuilding the file later
+		self.header = self.dzfile.read(self._dz_head_len)
+
 		# Verify DZ header
-		verify_header = self.dzfile.read(4)
+		verify_header = self.header[0:len(self._dz_header)]
 		if verify_header != self._dz_header:
 			print("[!] Error: Unsupported DZ file format.")
 			print("[ ] Expected: {} ,\n\tbut received {} .".format(" ".join(hex(n) for n in self._dz_header), " ".join(hex(n) for n in verify_header)))
 			sys.exit(1)
 
-		# Skip to end of DZ header
-		self.header = self.dzfile.seek(self._dz_head_len, io.SEEK_SET)
+		# We've read the entire header in at this point
 
 	def getChunkCount(self):
 		"""
@@ -429,6 +450,18 @@ class DZFile:
 		Return the number of slices we've got
 		"""
 		return len(self.slices)
+
+	def getChunkName(self, idx):
+		"""
+		Return the name of the given chunk index
+		"""
+		return self.chunks[idx].getChunkName()
+
+	def getSliceName(self, idx):
+		"""
+		Return the name of the given slice index
+		"""
+		return self.slices[idx].getSliceName()
 
 	def extractChunk(self, file, name, idx, slice=None):
 		"""
@@ -444,6 +477,23 @@ class DZFile:
 		Extract the whole slice to the FileIO file named name
 		"""
 		return self.slices[idx].extractSlice(file, name)
+
+	def extractImage(self, file, name):
+		"""
+		Extract the whole file to an image file named name
+		"""
+
+		for slice in self.slices:
+			file.seek(slice.getStart(), io.SEEK_SET)
+			slice.extractSlice(file, name)
+
+	def saveHeader(self, dir):
+		"""
+		Dump the header from the original file into the output dir
+		"""
+		name = os.path.join(dir, ".header")
+		file = io.FileIO(name, "wb")
+		file.write(self.header)
 
 	def __init__(self, file):
 		"""
@@ -467,7 +517,6 @@ class DZFileTools:
 	"""
 
 	# Setup variables
-	partitions = []
 	outdir = "dzextracted"
 
 	def parseArgs(self):
@@ -476,55 +525,95 @@ class DZFileTools:
 		parser.add_argument('-f', '--file', help='DZ File to read', action='store', required=True, dest='dzfile')
 		group = parser.add_mutually_exclusive_group(required=True)
 		group.add_argument('-l', '--list', help='List partitions', action='store_true', dest='listOnly')
-		group.add_argument('-x', '--extract', help='Extract partition(s) (all by default)', action='store_true', dest='extract')
-		group.add_argument('-s', '--single', help='Single Extract by ID', action='store', dest='extractID', type=int)
+		group.add_argument('-x', '--extract', help='Extract data chunk(s) (all by default)', action='store_true', dest='extractChunk')
+		group.add_argument('-s', '--single', help='Extract diskslice(s) (partition(s)) (all by default)', action='store_true', dest='extractSlice')
+		group.add_argument('-i', '--image', help='Extract all partitions as a disk image', action='store_true', dest='extractImage')
 		parser.add_argument('-o', '--out', help='Output location', action='store', dest='outdir')
 
-		return parser.parse_args()
+		return parser.parse_known_args()
 
 	def cmdListPartitions(self):
 		print("[+] DZ Partition List\n=========================================")
 		self.dz_file.display()
 
-	def cmdExtractSingle(self, partID):
-		# Ensure that the output directory exists
-		if not os.path.exists(self.outdir):
-			os.makedirs(self.outdir)
-
-		print("[+] Extracting single chunk!\n")
-		chunk = self.dz_file.chunks[partID-1]
-		name = os.path.join(self.outdir, chunk.getChunkName())
-		file = io.FileIO(name, "wb")
-		self.dz_file.extractChunk(file, name, partID-1)
-
-	def cmdExtractAll(self):
-		# Ensure that the output directory exists
-		if not os.path.exists(self.outdir):
-			os.makedirs(self.outdir)
-
-		print("[+] Extracting all partitions!\n")
-		for idx, chunk in enumerate(self.dz_file.chunks):
-			name = os.path.join(self.outdir, chunk.getChunkName())
-#			print("[+] Extracting {:s} to {:s}".format(chunk.getChunkName(), name))
+	def cmdExtractChunk(self, files):
+		if len(files) == 0:
+			print("[+] Extracting all chunks!\n")
+			files = range(1, self.dz_file.getChunkCount()+1)
+		elif len(files) == 1:
+			print("[+] Extracting single chunk!\n")
+		else:
+			print("[+] Extracting {:d} chunks!\n".format(len(files)))
+		for idx in files:
+			try:
+				idx = int(idx)
+			except ValueError:
+				print('[!] Bad value "{:s}" (must be number)'.format(idx))
+				sys.exit(1)
+			if idx <= 0 or idx > self.dz_file.getChunkCount():
+				print("[!] Cannot extract out of range chunk {:d} (min=1 max={:d})".format(idx, len(self.dz_file.getChunkCount())))
+				sys.exit(1)
+			name = os.path.join(self.outdir, self.dz_file.getChunkName(idx-1))
 			file = io.FileIO(name, "wb")
-			self.dz_file.extractChunk(file, name, idx)
+			self.dz_file.extractChunk(file, name, idx-1)
+
+	def cmdExtractSlice(self, files):
+		if len(files) == 0:
+			print("[+] Extracting all slices^Wpartitions\n")
+			files = range(1, self.dz_file.getSliceCount()+1)
+		elif len(files) == 1:
+			print("[+] Extracting single slice^Wpartition!\n")
+		else:
+			print("[+] Extracting {:d} slices^Wpartitions!\n".format(len(files)))
+		for idx in files:
+			try:
+				idx = int(idx)
+			except ValueError:
+				print('[!] Bad value "{:s}" (must be number)'.format(idx))
+				sys.exit(1)
+			if idx <= 0 or idx > self.dz_file.getSliceCount():
+				print("[!] Cannot extract out of range slice {:d} (min=1 max={:d})".format(idx, self.dz_file.getSliceCount()))
+				sys.exit(1)
+			slice = self.dz_file.slices[idx-1]
+			name = os.path.join(self.outdir, slice.getSliceName() + ".img")
+			file = io.FileIO(name, "wb")
+			self.dz_file.extractSlice(file, name, idx-1)
+
+	def cmdExtractImage(self, files):
+		if len(files) > 0:
+			print("[!] Cannot specify specific portions to extract when outputting image")
+			sys.exit(1)
+		name = os.path.join(self.outdir, "image.img")
+		file = io.FileIO(name, "wb")
+		self.dz_file.extractImage(file, name)
 
 	def main(self):
 		args = self.parseArgs()
-		self.dz_file = DZFile(dzfile)
+		cmd = args[0]
+		files = args[1]
+		self.dz_file = DZFile(cmd.dzfile)
 
-		if "outdir" in args:
-			self.outdir = args.outdir
+		if "outdir" in cmd:
+			self.outdir = cmd.outdir
 
-		if args.listOnly:
+		if cmd.listOnly:
 			self.cmdListPartitions()
+			sys.exit(0)
 
-		elif args.extractID and args.extractID >= 0:
-			self.cmdExtractSingle(args.extractID)
+		# Ensure that the output directory exists
+		if not os.path.exists(self.outdir):
+			os.makedirs(self.outdir)
 
-		elif args.extract:
-			self.cmdExtractAll()
+		if cmd.extractChunk:
+			self.cmdExtractChunk(files)
 
+		elif cmd.extractSlice:
+			self.cmdExtractSlice(files)
+
+		elif cmd.extractImage:
+			self.cmdExtractImage(files)
+
+		self.dz_file.saveHeader(self.outdir)
 
 if __name__ == "__main__":
 	dztools = DZFileTools()
