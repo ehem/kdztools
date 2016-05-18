@@ -43,16 +43,16 @@ class DZChunk:
 	# Example:
 	#   ('itemName', ('formatString', collapse))
 	_dz_chunk_dict = OrderedDict([
-		('header',	('4s',   False)),
-		('sliceName',	('32s',  True)),
-		('chunkName',	('64s',  True)),
-		('targetSize',	('I',    False)),
-		('dataSize',	('I',    False)),
-		('md5',		('16s',  False)),
-		('targetAddr',	('I',    False)),
-		('unknown',	('I',    False)),
+		('header',	('4s',   False)),	# magic number
+		('sliceName',	('32s',  True)),	# name of our slice
+		('chunkName',	('64s',  True)),	# name of our chunk
+		('targetSize',	('I',    False)),	# bytes of target area
+		('dataSize',	('I',    False)),	# amount of compressed
+		('md5',		('16s',  False)),	# MD5 of target image
+		('targetAddr',	('I',    False)),	# first block to write
+		('wipeCount',	('I',    False)),	# blocks to wipe before
 		('reserved',	('I',    True)),	# currently always zero
-		('crc32',	('I',    False)),
+		('crc32',	('I',    False)),	# CRC32 of target image
 		('pad',		('372s', False)),	# currently always zero
 	])
 
@@ -143,6 +143,10 @@ class DZChunk:
 		# Seek to the beginning of the compressed data in the specified partition
 		self.dzfile.seek(self.dataOffset, io.SEEK_SET)
 
+		# Create a hole at the end of the wipe area
+		current = file.seek(0, io.SEEK_CUR)
+		file.truncate(current + (self.wipeCount<<9))
+
 		# Read the whole compressed segment into RAM
 		zdata = self.dzfile.read(self.dataSize)
 
@@ -223,9 +227,6 @@ class DZChunk:
 		if dz_item['targetSize']&0x1FF != 0:
 			self.messages.append("[?] Warning: uncompressed size is {:d}, not a multiple of 512 (please report!)".format(dz_item['targetSize']))
 
-		# What is this value???
-#		self.messages.append("[?] Unknown value is: {:08X}".format(dz_item['unknown']))
-
 		# Save off all the important data
 		self.sliceName	= dz_item['sliceName']
 		self.chunkName	= dz_item['chunkName']
@@ -233,7 +234,7 @@ class DZChunk:
 		self.targetSize	= dz_item['targetSize']
 		self.dataSize	= dz_item['dataSize']
 		self.md5	= dz_item['md5']
-		self.unknown	= dz_item['unknown']
+		self.wipeCount	= dz_item['wipeCount']
 		self.crc32	= dz_item['crc32']
 
 		# This is where in the image we're supposed to go
@@ -350,7 +351,7 @@ class DZSlice:
 
 	def __init__(self, name):
 		"""
-		Initialize the instance of DZFile class
+		Initialize the instance of DZSlice class
 		"""
 		self.chunks = []
 		self.messages = set()
@@ -365,55 +366,6 @@ class DZFile:
 
 	_dz_header = b"\x32\x96\x18\x74"
 	_dz_head_len = 512
-
-	def addChunk(self, chunk):
-		"""
-		Adds a chunk to some slice, potentially creating a new slice
-		"""
-
-		name = chunk.getSliceName()
-
-		# Get the needed slice
-		if name in self.sliceIdx:
-			slice = self.sliceIdx[name]
-		else:
-# FIXME: what if chunks out of order?
-			slice = DZSlice(name)
-			self.slices.append(slice)
-			self.sliceIdx[name] = slice
-
-		# Add it
-		self.chunks.append(chunk)
-		slice.addChunk(chunk)
-
-	def loadChunks(self):
-		"""
-		Loads the headers of the chunks to prepare for listing|extract
-		"""
-		while True:
-
-			# Read each segment's header
-			chunk = DZChunk(self, self.dzfile)
-			self.addChunk(chunk)
-
-			# Would seeking the file to the end of the compressed
-			# data bring us to the end of the file, or beyond it?
-			next = chunk.getNext()
-			if next >= int(self.length):
-				break
-
-			# Seek to next DZ header
-			self.dzfile.seek(next, io.SEEK_SET)
-
-	def display(self):
-		"""
-		Display information on the various chunks that were found
-		"""
-		chunkIdx = 0
-		sliceIdx = 0
-		for slice in self.slices:
-			sliceIdx+=1
-			chunkIdx = slice.display(sliceIdx, chunkIdx)
 
 	def open(self, file):
 		"""
@@ -438,6 +390,80 @@ class DZFile:
 			sys.exit(1)
 
 		# We've read the entire header in at this point
+
+	def loadChunks(self):
+		"""
+		Loads the headers of the chunks to prepare for listing|extract
+		"""
+		while True:
+
+			# Read each segment's header
+			chunk = DZChunk(self, self.dzfile)
+			self.addChunk(chunk)
+
+			# Would seeking the file to the end of the compressed
+			# data bring us to the end of the file, or beyond it?
+			next = chunk.getNext()
+			if next >= int(self.length):
+				break
+
+			# Seek to next DZ header
+			self.dzfile.seek(next, io.SEEK_SET)
+
+	def checkValues(self):
+		"""
+		Check values for consistency with suspected use
+		"""
+#		cur = 0
+#		fail0 = 0
+#		fail1 = 0
+#		for chunk in self.chunks:
+#			if chunk.getTargetStart() != cur:
+#				print("[ ] Sanity, current chunk location unexpected! ({:d} vs {:d}, {:s})".format(cur, chunk.getTargetStart(), chunk.getChunkName()))
+#				fail0 += 1
+#			if chunk.getTargetStart() < cur:
+#				print("[!] Sanity, current chunk starts too early! ({:d} vs {:d}, {:s})".format(cur, chunk.getTargetStart(), chunk.getChunkName()))
+#				fail1 += 1
+#			cur = chunk.getTargetStart() + (chunk.wipeCount << 9)
+#		if fail0 == 0:
+#			print("[ ] Sanity checking seems to suggest unknown has been interpretted!")
+#		else:
+#			print("[ ] {:d} chunks failed sanity 0".format(fail0))
+#		if fail1 == 0:
+#			print("[ ] Sanity checking seems to suggest unknown is a block wipe directive")
+#		else:
+#			print("[ ] {:d} chunks failed sanity 1".format(fail1))
+		pass
+
+	def addChunk(self, chunk):
+		"""
+		Adds a chunk to some slice, potentially creating a new slice
+		"""
+
+		name = chunk.getSliceName()
+
+		# Get the needed slice
+		if name in self.sliceIdx:
+			slice = self.sliceIdx[name]
+		else:
+# FIXME: what if chunks out of order?
+			slice = DZSlice(name)
+			self.slices.append(slice)
+			self.sliceIdx[name] = slice
+
+		# Add it
+		self.chunks.append(chunk)
+		slice.addChunk(chunk)
+
+	def display(self):
+		"""
+		Display information on the various chunks that were found
+		"""
+		chunkIdx = 0
+		sliceIdx = 0
+		for slice in self.slices:
+			sliceIdx+=1
+			chunkIdx = slice.display(sliceIdx, chunkIdx)
 
 	def getChunkCount(self):
 		"""
@@ -507,6 +533,7 @@ class DZFile:
 
 		self.open(file)
 		self.loadChunks()
+		self.checkValues()
 
 
 
