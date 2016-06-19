@@ -28,7 +28,18 @@ from struct import unpack
 from collections import OrderedDict
 from binascii import crc32
 
-class DZChunk:
+
+class DZStruct:
+	"""
+	Common class for areas with structure
+	"""
+# 4 byte header
+# 512 byte length
+# OrderedDict layout out 512 bytes of stuff
+
+
+
+class DZChunk(DZStruct):
 	"""
 	Representation of an individual file chunk from a LGE DZ file
 	"""
@@ -53,7 +64,7 @@ class DZChunk:
 		('wipeCount',	('I',    False)),	# blocks to wipe before
 		('reserved',	('I',    True)),	# currently always zero
 		('crc32',	('I',    False)),	# CRC32 of target image
-		('pad',		('372s', False)),	# currently always zero
+		('pad',		('372s', True)),	# currently always zero
 	])
 
 	# Generate the formatstring for struct.unpack()
@@ -219,7 +230,7 @@ class DZChunk:
 				sys.exit(-1)
 
 		# To my knowledge this is supposed to be blank (for now...)
-		if len(dz_item['pad'].rstrip(b'\x00')) != 0:
+		if len(dz_item['pad']) != 0:
 			self.messages.append("[!] Warning: pad is not empty")
 			sys.exit(1)
 
@@ -359,13 +370,50 @@ class DZSlice:
 
 
 
-class DZFile:
+class DZFile(DZStruct):
 	"""
 	Representation of the data parsed from a LGE DZ file
 	"""
 
 	_dz_header = b"\x32\x96\x18\x74"
 	_dz_head_len = 512
+
+	# Format string dict
+	#   itemName is the new dict key for the data to be stored under
+	#   formatString is the Python formatstring for struct.unpack()
+	#   collapse is boolean that controls whether extra \x00 's should be stripped
+	# Example:
+	#   ('itemName', ('formatString', collapse))
+	_dz_file_dict = OrderedDict([
+		('header',	('4s',   False)),	# magic number
+		('unknown0',	('I',    False)),
+		('unknown1',	('I',    False)),
+		('reserved0',	('I',    True)),	# currently always zero
+		('device',	('32s',  True)),
+		('version',	('144s', True)),
+		('chunkCount',	('I',    False)),
+		('unknown2',	('16s',  False)),	# MD5 checksum?
+		('unknown3',	('I',    False)),
+		('unknown4',	('I',    False)),
+		('unknown5',	('I',    False)),
+		('unknown6',	('16s',  False)),	# MD5 checksum?
+		('unknown7',	('48s',  False)),	# Id? windows thing?
+		('unknown8',	('16s',  True)),	# "user"???
+		('reserved1',	('I',    True)),	# currently always zero
+		('unknown9',	('I',    False)),
+		('unknownA',	('I',    False)),
+		('reserved2',	('I',    True)),	# currently always zero
+		('unknownB',	('I',    False)),
+		('unknownC',	('I',    False)),
+		('unknownD',	('I',    False)),
+		('pad',		('180s', True)),	# currently always zero
+	])
+
+	# Generate the formatstring for struct.unpack()
+	_dz_formatstring = " ".join([x[0] for x in _dz_file_dict.values()])
+
+	# Generate list of items that can be collapsed (truncated)
+	_dz_collapsibles = [n for n, (y, p) in _dz_file_dict.items() if p]
 
 	def open(self, file):
 		"""
@@ -382,14 +430,42 @@ class DZFile:
 		# Save the full header for rebuilding the file later
 		self.header = self.dzfile.read(self._dz_head_len)
 
+		# "Make the item"
+		# Create a new dict using the keys from the format string
+		# and the format string itself
+		# and apply the format to the buffer
+
+		dz_file = dict(
+			zip(
+				self._dz_file_dict.keys(),
+				unpack(self._dz_formatstring, self.header)
+			)
+		)
+
 		# Verify DZ header
-		verify_header = self.header[0:len(self._dz_header)]
+		verify_header = dz_file['header']
 		if verify_header != self._dz_header:
 			print("[!] Error: Unsupported DZ file format.")
 			print("[ ] Expected: {} ,\n\tbut received {} .".format(" ".join(hex(n) for n in self._dz_header), " ".join(hex(n) for n in verify_header)))
 			sys.exit(1)
 
-		# We've read the entire header in at this point
+		# Collapse (truncate) each key's value if it's listed as collapsible
+		for key in self._dz_collapsibles:
+			if type(dz_file[key]) is str or type(dz_file[key]) is bytes:
+				dz_file[key] = dz_file[key].rstrip(b'\x00')
+				if b'\x00' in dz_file[key]:
+					print("[!] Error: extraneous data found IN "+key)
+					sys.exit(1)
+			elif type(dz_file[key]) is int:
+				if dz_file[key] != 0:
+					print('[!] Error: field "'+key+'" is non-zero ('+hex(dz_file[key])+')')
+					sys.exit(1)
+			else:
+				print("[!] Error: internal error")
+				sys.exit(-1)
+
+		self.chunkCount = dz_file['chunkCount']
+		# HERE
 
 	def loadChunks(self):
 		"""
@@ -433,7 +509,9 @@ class DZFile:
 #			print("[ ] Sanity checking seems to suggest unknown is a block wipe directive")
 #		else:
 #			print("[ ] {:d} chunks failed sanity 1".format(fail1))
-		pass
+
+		if len(self.chunks) != self.chunkCount:
+			print("[!] Warning: chunks in header differs from chunks found (please report)")
 
 	def addChunk(self, chunk):
 		"""
@@ -530,6 +608,14 @@ class DZFile:
 		self.sliceIdx = {}
 
 		self.chunks = []
+
+		# Hashes candidates for data in header area, all the chunk
+		# headers, all the payload data, or everything
+		self.hashHeaders = hashlib.md5()
+		self.hashPayload = hashlib.md5()
+		self.hashImage = hashlib.md5()
+		self.hashAll = hashlib.md5()
+		# try crc32 ?
 
 		self.open(file)
 		self.loadChunks()
