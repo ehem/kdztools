@@ -24,7 +24,7 @@ import io
 import zlib
 import argparse
 import hashlib
-from struct import unpack
+from struct import unpack, pack, calcsize
 from collections import OrderedDict
 from binascii import crc32, b2a_hex
 
@@ -186,6 +186,11 @@ class DZChunk(DZStruct):
 		"""
 		Loads the DZ header in the form as defined by self._dz_chunk_dict
 		"""
+
+		# Sanity check
+		if calcsize(self._dz_formatstring) != self._dz_chunk_len:
+			print("[!] Internal error!  Chunk format wrong!")
+			sys.exit(-1)
 
 		# Read a whole DZ header
 		buf = file.read(self._dz_chunk_len)
@@ -425,6 +430,11 @@ class DZFile(DZStruct):
 		"""
 		What do you expect? Open file and check the header
 		"""
+
+		# Sanity check
+		if calcsize(self._dz_formatstring) != self._dz_head_len:
+			print("[!] Internal error!  Header format wrong!")
+			sys.exit(-1)
 
 		# Open the file
 		self.dzfile = io.FileIO(file, "rb")
