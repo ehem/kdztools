@@ -26,10 +26,10 @@ import argparse
 import hashlib
 from struct import unpack
 from collections import OrderedDict
-from binascii import crc32
+from binascii import crc32, b2a_hex
 
 
-class DZStruct:
+class DZStruct(object):
 	"""
 	Common class for areas with structure
 	"""
@@ -175,7 +175,7 @@ class DZChunk(DZStruct):
 		md5.update(buf)
 
 		if md5.digest() != self.md5:
-			print("[!] Error: MD5 of data doesn't match header ({:032X} vs {:032X})".format(md5.digest(), self.md5))
+			print("[!] Error: MD5 of data doesn't match header ({:32s} vs {:32s})".format(md5.hexdigest(), b2a_hex(self.md5)))
 			sys.exit(1)
 
 		# Print our messages
@@ -213,6 +213,15 @@ class DZChunk(DZStruct):
 			print("[!] Bad DZ chunk header!")
 			sys.exit(1)
 
+		# Add ourselves to the hashes for checking
+		dz.md5Headers.update(buf)
+
+### experiment, results negative
+		dz.crcHeaders = crc32(buf, dz.crcHeaders)
+
+		dz.md5HeaderNZ.update(buf[0:-len(dz_item['pad'])])
+		dz.crcHeaderNZ=crc32(buf[0:-len(dz_item['pad'])], dz.crcHeaders)
+### experiment, results negative
 
 		# Collapse (truncate) each key's value if it's listed as collapsible
 		for key in self._dz_collapsibles:
@@ -259,7 +268,7 @@ class DZChunk(DZStruct):
 
 
 
-class DZSlice:
+class DZSlice(object):
 	"""
 	Representation of a diskslice from a LGE DZ file
 	"""
@@ -386,26 +395,23 @@ class DZFile(DZStruct):
 	#   ('itemName', ('formatString', collapse))
 	_dz_file_dict = OrderedDict([
 		('header',	('4s',   False)),	# magic number
-		('unknown0',	('I',    False)),
-		('unknown1',	('I',    False)),
-		('reserved0',	('I',    True)),	# currently always zero
+		('formatMajor',	('I',    False)),	# always 2 in LE
+		('formatMinor',	('I',    False)),	# always 1 in LE
+		('reserved0',	('I',    True)),	# format patchlevel?
 		('device',	('32s',  True)),
-		('version',	('144s', True)),
+		('version',	('144s', True)),	# "factoryversion"
 		('chunkCount',	('I',    False)),
-		('unknown2',	('16s',  False)),	# MD5 checksum?
-		('unknown3',	('I',    False)),
-		('unknown4',	('I',    False)),
-		('unknown5',	('I',    False)),
-		('unknown6',	('16s',  False)),	# MD5 checksum?
-		('unknown7',	('48s',  False)),	# Id? windows thing?
-		('unknown8',	('16s',  True)),	# "user"???
+		('md5',		('16s',  False)),	# MD5 of chunk headers
+		('unknown0',	('I',    False)),
 		('reserved1',	('I',    True)),	# currently always zero
-		('unknown9',	('I',    False)),
-		('unknownA',	('I',    False)),
+		('unknown1',	('I',    False)),
+		('unknown2',	('16s',  False)),	# MD5 checksum?
+		('unknown3',	('48s',  False)),	# Id? windows thing?
+		('build_type',	('20s',  True)),	# "user"???
+		('unknown4',	('8s',   False)),	# version code?
 		('reserved2',	('I',    True)),	# currently always zero
-		('unknownB',	('I',    False)),
-		('unknownC',	('I',    False)),
-		('unknownD',	('I',    False)),
+		('reserved3',	('2s',   True)),	# padding?
+		('oldDateCode',	('10s',	 True)),	# prior firmware date?
 		('pad',		('180s', True)),	# currently always zero
 	])
 
@@ -449,6 +455,13 @@ class DZFile(DZStruct):
 			print("[ ] Expected: {} ,\n\tbut received {} .".format(" ".join(hex(n) for n in self._dz_header), " ".join(hex(n) for n in verify_header)))
 			sys.exit(1)
 
+		# Appears to be version numbers for the format
+		if dz_file['formatMajor'] > 2:
+			print("[!] Error: DZ format version too high! (please report)")
+			sys.exit(1)
+		elif dz_file['formatMinor'] > 1:
+			print("[!] Warning: DZ format more recent than previous versions, output unreliable")
+
 		# Collapse (truncate) each key's value if it's listed as collapsible
 		for key in self._dz_collapsibles:
 			if type(dz_file[key]) is str or type(dz_file[key]) is bytes:
@@ -465,7 +478,26 @@ class DZFile(DZStruct):
 				sys.exit(-1)
 
 		self.chunkCount = dz_file['chunkCount']
-		# HERE
+
+		# save this for creating modified files later
+		# (ro.lge.factoryversion)
+		self.ro_lge_factoryversion = dz_file['version']
+
+		self.formatMajor = dz_file['formatMajor']
+		self.formatMinor = dz_file['formatMinor']
+
+		# currently only "user" has been seen in wild
+		self.build_type = dz_file['build_type']
+
+		# save this for consistency checking
+		self.md5 = dz_file['md5']
+
+		# save these for later analysis
+		self.unknown0 = dz_file['unknown0']
+		self.unknown1 = dz_file['unknown1']
+		self.unknown2 = dz_file['unknown2']
+		self.unknown3 = dz_file['unknown3']
+		self.unknown4 = dz_file['unknown4']
 
 	def loadChunks(self):
 		"""
@@ -490,28 +522,53 @@ class DZFile(DZStruct):
 		"""
 		Check values for consistency with suspected use
 		"""
-#		cur = 0
-#		fail0 = 0
-#		fail1 = 0
-#		for chunk in self.chunks:
-#			if chunk.getTargetStart() != cur:
-#				print("[ ] Sanity, current chunk location unexpected! ({:d} vs {:d}, {:s})".format(cur, chunk.getTargetStart(), chunk.getChunkName()))
-#				fail0 += 1
-#			if chunk.getTargetStart() < cur:
-#				print("[!] Sanity, current chunk starts too early! ({:d} vs {:d}, {:s})".format(cur, chunk.getTargetStart(), chunk.getChunkName()))
-#				fail1 += 1
-#			cur = chunk.getTargetStart() + (chunk.wipeCount << 9)
-#		if fail0 == 0:
-#			print("[ ] Sanity checking seems to suggest unknown has been interpretted!")
-#		else:
-#			print("[ ] {:d} chunks failed sanity 0".format(fail0))
-#		if fail1 == 0:
-#			print("[ ] Sanity checking seems to suggest unknown is a block wipe directive")
-#		else:
-#			print("[ ] {:d} chunks failed sanity 1".format(fail1))
 
+		# This does look like a count of chunks
 		if len(self.chunks) != self.chunkCount:
-			print("[!] Warning: chunks in header differs from chunks found (please report)")
+			print("[!] Error: chunks in header differs from chunks found (please report)")
+			sys.exit(-1)
+
+		# Checking this field for what is expected
+		md5Headers = self.md5Headers.digest()
+
+		if md5Headers != self.md5:
+			print("[!] Error: MD5 of chunk headers doesn't match header ({:32s} vs {:32s})".format(self.md5Headers.hexdigest(), b2a_hex(self.md5)))
+			sys.exit(-1)
+
+
+		# these are speculative, disabled for others
+		return 0
+		# Other speculation
+		md5HeaderNZ = self.md5HeaderNZ.digest()
+
+		if md5HeaderNZ == self.unknown2:
+			self.messages.add("[ ] unknown2 is consistent with MD5 of non-zero header areas")
+		else:
+			self.messages.add("[ ] MD5 of non-zero header areas not found ({:32s})".format(self.md5HeaderNZ.hexdigest()))
+
+
+		self.crcHeaders = self.crcHeaders & 0xFFFFFFFF
+		if self.crcHeaders == self.unknown0:
+			self.messages.add("[ ] unknown0 is consistent with CRC32 of headers")
+		elif self.crcHeaders == self.unknown1:
+			self.messages.add("[ ] unknown1 is consistent with CRC32 of headers")
+		elif self.crcHeaders == self.unknown4:
+			self.messages.add("[ ] unknown4 is consistent with CRC32 of headers")
+		else:
+			self.messages.add("[ ] No CRC32 of headers found ({:08X})".format(self.crcHeaders))
+
+
+		self.crcHeaderNZ = self.crcHeaderNZ & 0xFFFFFFFF
+		if self.crcHeaderNZ == self.unknown0:
+			self.messages.add("[ ] unknown0 is consistent with CRC32 of non-zero header areas")
+		elif self.crcHeaderNZ == self.unknown1:
+			self.messages.add("[ ] unknown1 is consistent with CRC32 of non-zero header areas")
+		elif self.crcHeaderNZ == self.unknown4:
+			self.messages.add("[ ] unknown4 is consistent with CRC32 of non-zero header areas")
+		else:
+			self.messages.add("[ ] No CRC32 of non-zero header areas found ({:08X})".format(self.crcHeaders))
+
+# HERE
 
 	def addChunk(self, chunk):
 		"""
@@ -542,6 +599,9 @@ class DZFile(DZStruct):
 		for slice in self.slices:
 			sliceIdx+=1
 			chunkIdx = slice.display(sliceIdx, chunkIdx)
+
+		for m in self.messages:
+			print(m)
 
 	def getChunkCount(self):
 		"""
@@ -609,12 +669,22 @@ class DZFile(DZStruct):
 
 		self.chunks = []
 
+		self.messages = set()
+
+		# Hash of the headers for consistency checking
+		self.md5Headers = hashlib.md5()
+
 		# Hashes candidates for data in header area, all the chunk
 		# headers, all the payload data, or everything
-		self.hashHeaders = hashlib.md5()
-		self.hashPayload = hashlib.md5()
-		self.hashImage = hashlib.md5()
-		self.hashAll = hashlib.md5()
+		self.crcHeaders = crc32(b"")
+		self.md5HeaderNZ = hashlib.md5()
+		self.crcHeaderNZ = crc32(b"")
+		self.md5Payload = hashlib.md5()
+		self.crcPayload = crc32(b"")
+		self.md5Image = hashlib.md5()
+		self.crcImage = crc32(b"")
+		self.md5All = hashlib.md5()
+		self.crcAll = crc32(b"")
 		# try crc32 ?
 
 		self.open(file)
@@ -634,7 +704,7 @@ class DZFileTools:
 
 	def parseArgs(self):
 		# Parse arguments
-		parser = argparse.ArgumentParser(description='LG Compressed DZ File Extractor originally by IOMonster', version="$Id$ $Date$")
+		parser = argparse.ArgumentParser(description='LG Compressed DZ File Extractor originally by IOMonster')
 		parser.add_argument('-f', '--file', help='DZ File to read', action='store', required=True, dest='dzfile')
 		group = parser.add_mutually_exclusive_group(required=True)
 		group.add_argument('-l', '--list', help='List partitions', action='store_true', dest='listOnly')
