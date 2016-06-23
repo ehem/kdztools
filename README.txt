@@ -14,9 +14,14 @@ Run kdzfiletools.py or dzfiletools.py with the -h option to get more options.
 
 	-x or --extract
 		Extract all files in the archive
+		With undz specific (multiple) chunks can be given by ID
 
 	-s ID or --single ID
-		Extract a single partition by ID (can be found with --list)
+		Extract a single slice/partition by ID (can be found with --list)
+		With undz multiple IDs can be given and the whole slice/partition will be extracted
+
+	-i or --image
+		(undz-only) Extract who archive as a disk image
 
 	-o DIR or --out DIR
 		Set output directory instead of the default "[kdz|dz]extracted" directory
