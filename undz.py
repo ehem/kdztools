@@ -68,7 +68,7 @@ class DZChunk(DZStruct):
 	])
 
 	# Generate the formatstring for struct.unpack()
-	_dz_formatstring = " ".join([x[0] for x in _dz_chunk_dict.values()])
+	_dz_formatstring = "<" + "".join([x[0] for x in _dz_chunk_dict.values()])
 
 	# Generate list of items that can be collapsed (truncated)
 	_dz_collapsibles = [n for n, (y, p) in _dz_chunk_dict.items() if p]
@@ -421,7 +421,7 @@ class DZFile(DZStruct):
 	])
 
 	# Generate the formatstring for struct.unpack()
-	_dz_formatstring = " ".join([x[0] for x in _dz_file_dict.values()])
+	_dz_formatstring = "<" + "".join([x[0] for x in _dz_file_dict.values()])
 
 	# Generate list of items that can be collapsed (truncated)
 	_dz_collapsibles = [n for n, (y, p) in _dz_file_dict.items() if p]
