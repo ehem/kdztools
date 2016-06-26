@@ -18,6 +18,7 @@ Copyright (C) 2013 IOMonster (thecubed on XDA)
 	along with this program.  If not, see <http://www.gnu.org/licenses/>.
 """
 
+from __future__ import print_function
 import os
 import sys
 import io
@@ -168,14 +169,14 @@ class DZChunk(DZStruct):
 		crc = crc32(buf) & 0xFFFFFFFF
 
 		if crc != self.crc32:
-			print("[!] Error: CRC32 of data doesn't match header ({:08X} vs {:08X})".format(crc, self.crc32))
+			print("[!] Error: CRC32 of data doesn't match header ({:08X} vs {:08X})".format(crc, self.crc32), file=sys.stderr)
 			sys.exit(1)
 
 		md5 = hashlib.md5()
 		md5.update(buf)
 
 		if md5.digest() != self.md5:
-			print("[!] Error: MD5 of data doesn't match header ({:32s} vs {:32s})".format(md5.hexdigest(), b2a_hex(self.md5)))
+			print("[!] Error: MD5 of data doesn't match header ({:32s} vs {:32s})".format(md5.hexdigest(), b2a_hex(self.md5)), file=sys.stderr)
 			sys.exit(1)
 
 		# Print our messages
@@ -189,7 +190,7 @@ class DZChunk(DZStruct):
 
 		# Sanity check
 		if calcsize(self._dz_formatstring) != self._dz_chunk_len:
-			print("[!] Internal error!  Chunk format wrong!")
+			print("[!] Internal error!  Chunk format wrong!", file=sys.stderr)
 			sys.exit(-1)
 
 		# Read a whole DZ header
@@ -199,12 +200,10 @@ class DZChunk(DZStruct):
 		# Create a new dict using the keys from the format string
 		# and the format string itself
 		# and apply the format to the buffer
-		dz_item = dict(
-			zip(
-				self._dz_chunk_dict.keys(),
-				unpack(self._dz_formatstring,buf)
-			)
-		)
+		dz_item = dict(zip(
+			self._dz_chunk_dict.keys(),
+			unpack(self._dz_formatstring,buf)
+		))
 
 		# used for warnings about the chunk
 		self.messages = []
@@ -215,7 +214,7 @@ class DZChunk(DZStruct):
 
 		# Verify DZ sub-header
 		if dz_item['header'] != self._dz_chunk_header:
-			print("[!] Bad DZ chunk header!")
+			print("[!] Bad DZ chunk header!", file=sys.stderr)
 			sys.exit(1)
 
 		# Add ourselves to the hashes for checking
@@ -233,19 +232,19 @@ class DZChunk(DZStruct):
 			if type(dz_item[key]) is str or type(dz_item[key]) is bytes:
 				dz_item[key] = dz_item[key].rstrip(b'\x00')
 				if b'\x00' in dz_item[key]:
-					print("[!] Error: extraneous data found IN "+key)
+					print("[!] Error: extraneous data found IN "+key, file=sys.stderr)
 					sys.exit(1)
 			elif type(dz_item[key]) is int:
 				if dz_item[key] != 0:
-					print('[!] Error: field "'+key+'" is non-zero ('+hex(dz_item[key])+')')
+					print('[!] Error: field "'+key+'" is non-zero ('+hex(dz_item[key])+')', file=sys.stderr)
 					sys.exit(1)
 			else:
-				print("[!] Error: internal error")
+				print("[!] Error: internal error", file=sys.stderr)
 				sys.exit(-1)
 
 		# To my knowledge this is supposed to be blank (for now...)
 		if len(dz_item['pad']) != 0:
-			self.messages.append("[!] Warning: pad is not empty")
+			print("[!] Error: pad is not empty", file=sys.stderr)
 			sys.exit(1)
 
 		#
@@ -303,7 +302,7 @@ class DZSlice(object):
 		while True:
 			if min <= max:
 				if self.chunks[min-1].getTargetEnd() >= offset or chunk.getTargetEnd() >= self.chunks[min].getTargetStart():
-					print("[!] Overlapping chunks found (please report!)")
+					print("[!] Overlapping chunks found (please report!)", file=sys.stderr)
 					sys.exit(-1)
 				self.chunks.insert(min, chunk)
 				return
@@ -314,7 +313,7 @@ class DZSlice(object):
 			elif offset > offchk:
 				min = idx
 			else:
-				print("[!] Chunks with duplicate offsets found (please report!)")
+				print("[!] Chunks with duplicate offsets found (please report!)", file=sys.stderr)
 				sys.exit(-1)
 
 	def getStart(self):
@@ -433,7 +432,7 @@ class DZFile(DZStruct):
 
 		# Sanity check
 		if calcsize(self._dz_formatstring) != self._dz_head_len:
-			print("[!] Internal error!  Header format wrong!")
+			print("[!] Internal error!  Header format wrong!", file=sys.stderr)
 			sys.exit(-1)
 
 		# Open the file
@@ -451,40 +450,38 @@ class DZFile(DZStruct):
 		# and the format string itself
 		# and apply the format to the buffer
 
-		dz_file = dict(
-			zip(
-				self._dz_file_dict.keys(),
-				unpack(self._dz_formatstring, self.header)
-			)
-		)
+		dz_file = dict(zip(
+			self._dz_file_dict.keys(),
+			unpack(self._dz_formatstring, self.header)
+		))
 
 		# Verify DZ header
 		verify_header = dz_file['header']
 		if verify_header != self._dz_header:
-			print("[!] Error: Unsupported DZ file format.")
-			print("[ ] Expected: {} ,\n\tbut received {} .".format(" ".join(hex(n) for n in self._dz_header), " ".join(hex(n) for n in verify_header)))
+			print("[!] Error: Unsupported DZ file format.", file=sys.stderr)
+			print("[ ] Expected: {} ,\n\tbut received {} .".format(" ".join(hex(n) for n in self._dz_header), " ".join(hex(n) for n in verify_header)), file=sys.stderr)
 			sys.exit(1)
 
 		# Appears to be version numbers for the format
 		if dz_file['formatMajor'] > 2:
-			print("[!] Error: DZ format version too high! (please report)")
+			print("[!] Error: DZ format version too high! (please report)", file=sys.stderr)
 			sys.exit(1)
 		elif dz_file['formatMinor'] > 1:
-			print("[!] Warning: DZ format more recent than previous versions, output unreliable")
+			print("[!] Warning: DZ format more recent than previous versions, output unreliable", file=sys.stderr)
 
 		# Collapse (truncate) each key's value if it's listed as collapsible
 		for key in self._dz_collapsibles:
 			if type(dz_file[key]) is str or type(dz_file[key]) is bytes:
 				dz_file[key] = dz_file[key].rstrip(b'\x00')
 				if b'\x00' in dz_file[key]:
-					print("[!] Error: extraneous data found IN "+key)
+					print("[!] Error: extraneous data found IN "+key, file=sys.stderr)
 					sys.exit(1)
 			elif type(dz_file[key]) is int:
 				if dz_file[key] != 0:
-					print('[!] Error: field "'+key+'" is non-zero ('+hex(dz_file[key])+')')
+					print('[!] Error: field "'+key+'" is non-zero ('+hex(dz_file[key])+')', file=sys.stderr)
 					sys.exit(1)
 			else:
-				print("[!] Error: internal error")
+				print("[!] Error: internal error", file=sys.stderr)
 				sys.exit(-1)
 
 		self.chunkCount = dz_file['chunkCount']
@@ -535,14 +532,14 @@ class DZFile(DZStruct):
 
 		# This does look like a count of chunks
 		if len(self.chunks) != self.chunkCount:
-			print("[!] Error: chunks in header differs from chunks found (please report)")
+			print("[!] Error: chunks in header differs from chunks found (please report)", file=sys.stderr)
 			sys.exit(-1)
 
 		# Checking this field for what is expected
 		md5Headers = self.md5Headers.digest()
 
 		if md5Headers != self.md5:
-			print("[!] Error: MD5 of chunk headers doesn't match header ({:32s} vs {:32s})".format(self.md5Headers.hexdigest(), b2a_hex(self.md5)))
+			print("[!] Error: MD5 of chunk headers doesn't match header ({:32s} vs {:32s})".format(self.md5Headers.hexdigest(), b2a_hex(self.md5)), file=sys.stderr)
 			sys.exit(-1)
 
 
@@ -741,10 +738,10 @@ class DZFileTools:
 			try:
 				idx = int(idx)
 			except ValueError:
-				print('[!] Bad value "{:s}" (must be number)'.format(idx))
+				print('[!] Bad value "{:s}" (must be number)'.format(idx), file=sys.stderr)
 				sys.exit(1)
 			if idx <= 0 or idx > self.dz_file.getChunkCount():
-				print("[!] Cannot extract out of range chunk {:d} (min=1 max={:d})".format(idx, len(self.dz_file.getChunkCount())))
+				print("[!] Cannot extract out of range chunk {:d} (min=1 max={:d})".format(idx, len(self.dz_file.getChunkCount())), file=sys.stderr)
 				sys.exit(1)
 			name = os.path.join(self.outdir, self.dz_file.getChunkName(idx-1))
 			file = io.FileIO(name, "wb")
@@ -762,10 +759,10 @@ class DZFileTools:
 			try:
 				idx = int(idx)
 			except ValueError:
-				print('[!] Bad value "{:s}" (must be number)'.format(idx))
+				print('[!] Bad value "{:s}" (must be number)'.format(idx), file=sys.stderr)
 				sys.exit(1)
 			if idx <= 0 or idx > self.dz_file.getSliceCount():
-				print("[!] Cannot extract out of range slice {:d} (min=1 max={:d})".format(idx, self.dz_file.getSliceCount()))
+				print("[!] Cannot extract out of range slice {:d} (min=1 max={:d})".format(idx, self.dz_file.getSliceCount()), file=sys.stderr)
 				sys.exit(1)
 			slice = self.dz_file.slices[idx-1]
 			name = os.path.join(self.outdir, slice.getSliceName() + ".img")
@@ -774,7 +771,7 @@ class DZFileTools:
 
 	def cmdExtractImage(self, files):
 		if len(files) > 0:
-			print("[!] Cannot specify specific portions to extract when outputting image")
+			print("[!] Cannot specify specific portions to extract when outputting image", file=sys.stderr)
 			sys.exit(1)
 		name = os.path.join(self.outdir, "image.img")
 		file = io.FileIO(name, "wb")
