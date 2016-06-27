@@ -25,7 +25,7 @@ import io
 import zlib
 import argparse
 import hashlib
-from struct import unpack, pack, calcsize
+from struct import Struct
 from collections import OrderedDict
 from binascii import crc32, b2a_hex
 
@@ -68,8 +68,8 @@ class DZChunk(DZStruct):
 		('pad',		('372s', True)),	# currently always zero
 	])
 
-	# Generate the formatstring for struct.unpack()
-	_dz_formatstring = "<" + "".join([x[0] for x in _dz_chunk_dict.values()])
+	# Generate the struct for .unpack()
+	_dz_struct = Struct("<" + "".join([x[0] for x in _dz_chunk_dict.values()]))
 
 	# Generate list of items that can be collapsed (truncated)
 	_dz_collapsibles = [n for n, (y, p) in _dz_chunk_dict.items() if p]
@@ -189,7 +189,7 @@ class DZChunk(DZStruct):
 		"""
 
 		# Sanity check
-		if calcsize(self._dz_formatstring) != self._dz_chunk_len:
+		if self._dz_struct.size != self._dz_chunk_len:
 			print("[!] Internal error!  Chunk format wrong!", file=sys.stderr)
 			sys.exit(-1)
 
@@ -202,7 +202,7 @@ class DZChunk(DZStruct):
 		# and apply the format to the buffer
 		dz_item = dict(zip(
 			self._dz_chunk_dict.keys(),
-			unpack(self._dz_formatstring,buf)
+			self._dz_struct.unpack(buf)
 		))
 
 		# used for warnings about the chunk
@@ -419,8 +419,8 @@ class DZFile(DZStruct):
 		('pad',		('180s', True)),	# currently always zero
 	])
 
-	# Generate the formatstring for struct.unpack()
-	_dz_formatstring = "<" + "".join([x[0] for x in _dz_file_dict.values()])
+	# Generate the struct for .unpack()
+	_dz_struct = Struct("<" + "".join([x[0] for x in _dz_file_dict.values()]))
 
 	# Generate list of items that can be collapsed (truncated)
 	_dz_collapsibles = [n for n, (y, p) in _dz_file_dict.items() if p]
@@ -431,7 +431,7 @@ class DZFile(DZStruct):
 		"""
 
 		# Sanity check
-		if calcsize(self._dz_formatstring) != self._dz_head_len:
+		if self._dz_struct.size != self._dz_head_len:
 			print("[!] Internal error!  Header format wrong!", file=sys.stderr)
 			sys.exit(-1)
 
@@ -452,7 +452,7 @@ class DZFile(DZStruct):
 
 		dz_file = dict(zip(
 			self._dz_file_dict.keys(),
-			unpack(self._dz_formatstring, self.header)
+			self._dz_struct.unpack(self.header)
 		))
 
 		# Verify DZ header
