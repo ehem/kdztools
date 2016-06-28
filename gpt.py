@@ -137,7 +137,7 @@ class GPT(object):
 		verbose("Some information about table here...")
 		verbose("")
 
-		verbose("device UUID={:s}".format(self.uuid))
+		verbose("device UUID={:s}".format(str(self.uuid)))
 		verbose("myLBA={:d} alternateLBA={:d}".format(self.myLBA, self.altLBA))
 		verbose("firstUsableLBA={:d} lastUsableLBA={:d}".format(self.dataStartLBA, self.dataEndLBA))
 
