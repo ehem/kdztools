@@ -28,6 +28,7 @@ import hashlib
 from struct import Struct
 from collections import OrderedDict
 from binascii import crc32, b2a_hex
+import gpt
 
 
 class DZStruct(object):
@@ -73,6 +74,10 @@ class DZChunk(DZStruct):
 
 	# Generate list of items that can be collapsed (truncated)
 	_dz_collapsibles = [n for n, (y, p) in _dz_chunk_dict.items() if p]
+
+	# Blocksize being used
+	shiftLBA = 9
+	sizeLBA = 1<<shiftLBA
 
 
 	def getChunkName(self):
@@ -124,16 +129,63 @@ class DZChunk(DZStruct):
 		"""
 		return self.dataOffset + self.dataSize
 
+	def Messages(self, file=sys.stdout):
+		"""
+		Write our messages to file
+		"""
+		# Print our messages
+		for m in self.messages:
+			print(m, file=file)
+
+
 	def display(self, sliceIdx, selfIdx):
 		"""
 		Display information about our chunk
 		"""
-		print("{:2d}/{:2d} : {} ({:d} bytes)".format(sliceIdx, selfIdx, self.chunkName, self.dataSize))
-		for m in self.messages:
-			print(m)
+		print("{:2d}/{:2d} : {:s} ({:d} bytes)".format(sliceIdx, selfIdx, self.chunkName.decode("utf8"), self.dataSize))
+		self.Messages()
 		return ++selfIdx
 
-	def extract(self, file, name):
+	def extract(self):
+		"""
+		Extracts our payload from the compressed DZ file using ZLIB.
+		self function could be particularly memory-intensive when used
+		with large chunks, as the entire compressed chunk is loaded
+		into RAM and decompressed.
+
+		A better way to do self would be to chunk the zlib compressed
+		data and decompress it with zlib.decompressor() and a while
+		loop.
+
+		I'm lazy though, and y'all have fast computers, so self is good
+		enough.
+		"""
+
+		# Seek to the beginning of the compressed data in the specified partition
+		self.dzfile.seek(self.dataOffset, io.SEEK_SET)
+
+		# Read the whole compressed segment into RAM
+		zdata = self.dzfile.read(self.dataSize)
+
+		# Decompress the data
+		buf = zlib.decompress(zdata)
+
+		crc = crc32(buf) & 0xFFFFFFFF
+
+		if crc != self.crc32:
+			print("[!] Error: CRC32 of data doesn't match header ({:08X} vs {:08X})".format(crc, self.crc32), file=sys.stderr)
+			sys.exit(1)
+
+		md5 = hashlib.md5()
+		md5.update(buf)
+
+		if md5.digest() != self.md5:
+			print("[!] Error: MD5 of data doesn't match header ({:32s} vs {:32s})".format(md5.hexdigest(), b2a_hex(self.md5)), file=sys.stderr)
+			sys.exit(1)
+
+		return buf
+
+	def extractChunk(self, file, name):
 		"""
 		Extract the payload of our chunk into the file with the name
 
@@ -150,38 +202,25 @@ class DZChunk(DZStruct):
 		enough.
 		"""
 
-		print("[+] Extracting {:s} to {:s}".format(self.chunkName.decode("utf8"), name))
-
-		# Seek to the beginning of the compressed data in the specified partition
-		self.dzfile.seek(self.dataOffset, io.SEEK_SET)
+		if name:
+			print("[+] Extracting {:s} to {:s}".format(self.chunkName.decode("utf8"), name))
 
 		# Create a hole at the end of the wipe area
-		current = file.seek(0, io.SEEK_CUR)
-		file.truncate(current + (self.wipeCount<<9))
+		if file:
+			current = file.seek(0, io.SEEK_CUR)
+###
+#			# Ensure space is allocated to areas to be written
+#			for addr in range(0, (self.wipeCount<<self.shiftLBA), 1<<9)
+#				file.seek(current + addr, io.SEEK_CUR)
+#				file.write(b'\x00')
+###
+			file.truncate(current + (self.wipeCount<<self.shiftLBA))
 
-		# Read the whole compressed segment into RAM
-		zdata = self.dzfile.read(self.dataSize)
-
-		# Decompress the data, and write it to disk
-		buf = zlib.decompress(zdata)
-		file.write(buf)
-
-		crc = crc32(buf) & 0xFFFFFFFF
-
-		if crc != self.crc32:
-			print("[!] Error: CRC32 of data doesn't match header ({:08X} vs {:08X})".format(crc, self.crc32), file=sys.stderr)
-			sys.exit(1)
-
-		md5 = hashlib.md5()
-		md5.update(buf)
-
-		if md5.digest() != self.md5:
-			print("[!] Error: MD5 of data doesn't match header ({:32s} vs {:32s})".format(md5.hexdigest(), b2a_hex(self.md5)), file=sys.stderr)
-			sys.exit(1)
+		# Write it to file
+		file.write(self.extract())
 
 		# Print our messages
-		for m in self.messages:
-			print(m)
+		self.Messages()
 
 	def __init__(self, dz, file):
 		"""
@@ -254,7 +293,7 @@ class DZChunk(DZStruct):
 		# Save off all the important data
 		self.sliceName	= dz_item['sliceName']
 		self.chunkName	= dz_item['chunkName']
-		self.targetAddr = dz_item['targetAddr'] << 9
+		self.targetAddr = dz_item['targetAddr'] << self.shiftLBA
 		self.targetSize	= dz_item['targetSize']
 		self.dataSize	= dz_item['dataSize']
 		self.md5	= dz_item['md5']
@@ -262,10 +301,10 @@ class DZChunk(DZStruct):
 		self.crc32	= dz_item['crc32']
 
 		# This is where in the image we're supposed to go
-		targetAddr = int(self.chunkName[len(self.sliceName)+1:-4]) << 9
+		targetAddr = int(self.chunkName[len(self.sliceName)+1:-4]) << self.shiftLBA
 
 		if targetAddr != self.targetAddr:
-			print("[!] Uncompressed starting offset differs from chunk name!")
+			self.messages.append("[!] Uncompressed starting offset differs from chunk name!")
 
 		# Save the DZ file for later use
 		self.dzfile = file
@@ -285,36 +324,10 @@ class DZSlice(object):
 		offset = chunk.getTargetStart()
 		# if it is at the start...
 		if offset < self.start:
-			self.start = offset
-			self.chunks.insert(0, chunk)
-			return
+			print("[!] Warning: Chunk is part of \"{:s}\", but starts in front of slice?!".format(self.name), file=sys.stderr)
 
-		# the common, easy to optimize case
-		elif self.chunks[-1].getTargetEnd() < offset:
-			self.chunks.append(chunk)
-			return
+		self.chunks.append(chunk)
 
-		# If I'm perverse enough to think of this...
-		self.messages.add("[ ] Warning: Found out of order chunks (please report!)")
-		min = 1
-		max = len(self.chunks) - 1
-
-		while True:
-			if min <= max:
-				if self.chunks[min-1].getTargetEnd() >= offset or chunk.getTargetEnd() >= self.chunks[min].getTargetStart():
-					print("[!] Overlapping chunks found (please report!)", file=sys.stderr)
-					sys.exit(-1)
-				self.chunks.insert(min, chunk)
-				return
-			idx = (min + max) >> 1
-			offchk = self.chunks[idx].getTargetStart()
-			if offset < offchk:
-				max = idx + 1
-			elif offset > offchk:
-				min = idx
-			else:
-				print("[!] Chunks with duplicate offsets found (please report!)", file=sys.stderr)
-				sys.exit(-1)
 
 	def getStart(self):
 		"""
@@ -326,19 +339,21 @@ class DZSlice(object):
 		"""
 		Get the ending offset of our slice
 		"""
-		raise("not implemented")
+		return self.end
 
 	def getLength(self):
 		"""
 		Get the length of our slice
 		"""
-		raise("Function not implemented!")
+		return self.end-self.start
 
 	def display(self, sliceIdx, chunkIdx):
 		"""
 		Display information on the various chunks in our slice
 		Return the last index we used
 		"""
+		if len(self.chunks) == 0:
+			print("{:2d}/?? : {:s} (<empty>)".format(sliceIdx, self.name))
 		for chunk in self.chunks:
 			chunkIdx+=1
 			chunk.display(sliceIdx, chunkIdx)
@@ -354,32 +369,48 @@ class DZSlice(object):
 		"""
 		Get the name of our slice
 		"""
-		return self.chunks[0].getSliceName()
+		return self.name
 
 	def extractChunk(self, file, name, idx):
 		"""
 		Extract a given chunk
 		"""
-		self.chunks[idx].extract(file, name)
+		self.chunks[idx].extractChunk(file, name)
 
 	def extractSlice(self, file, name):
 		"""
 		Extract the whole slice to the FileIO file named name
 		"""
 
-		cur = self.getStart()
+		start = self.getStart()
 		for chunk in self.chunks:
-			file.seek(chunk.getTargetStart()-cur, io.SEEK_CUR)
-			chunk.extract(file, name)
-			cur = chunk.getTargetEnd()
+			cur = chunk.getTargetStart()
+			# Mostly happens for the backup GPT (large pad at start)
+			if cur < start:
+				# this ensures messages from extraction show up
+				chunk.extractChunk(file, name)
+				file.seek(0, io.SEEK_SET)
+				file.truncate(0)
+				# in case the long buffer was reeeally looong
 
-	def __init__(self, name):
+				buf = chunk.extract()
+				file.write(buf[cur-start:])
+			else:
+				file.seek(cur-start, io.SEEK_SET)
+				chunk.extractChunk(file, name)
+
+		# it is possible for chunks wipe area to extend beyond slice
+		file.truncate(self.getLength())
+
+	def __init__(self, name, start=0x7FFFFFFFFFFFFFFF, end=0):
 		"""
 		Initialize the instance of DZSlice class
 		"""
+		self.name = name
 		self.chunks = []
 		self.messages = set()
-		self.start = 0x7FFFFFFFFFFFFFFF
+		self.start = start
+		self.end = end
 
 
 
@@ -414,7 +445,7 @@ class DZFile(DZStruct):
 		('build_type',	('20s',  True)),	# "user"???
 		('unknown4',	('8s',   False)),	# version code?
 		('reserved2',	('I',    True)),	# currently always zero
-		('reserved3',	('2s',   True)),	# padding?
+		('reserved3',	('H',    True)),	# padding?
 		('oldDateCode',	('10s',	 True)),	# prior firmware date?
 		('pad',		('180s', True)),	# currently always zero
 	])
@@ -459,7 +490,7 @@ class DZFile(DZStruct):
 		verify_header = dz_file['header']
 		if verify_header != self._dz_header:
 			print("[!] Error: Unsupported DZ file format.", file=sys.stderr)
-			print("[ ] Expected: {} ,\n\tbut received {} .".format(" ".join(hex(n) for n in self._dz_header), " ".join(hex(n) for n in verify_header)), file=sys.stderr)
+			print("[ ] Expected: {:s} ,\n\tbut received {:s} .".format(" ".join(hex(n) for n in self._dz_header), " ".join(hex(n) for n in verify_header)), file=sys.stderr)
 			sys.exit(1)
 
 		# Appears to be version numbers for the format
@@ -506,15 +537,26 @@ class DZFile(DZStruct):
 		self.unknown3 = dz_file['unknown3']
 		self.unknown4 = dz_file['unknown4']
 
+
 	def loadChunks(self):
 		"""
 		Loads the headers of the chunks to prepare for listing|extract
 		"""
+
+		# are the chunks out of order in regards to image order?
+		disorder = False
+		last = -1
+
 		while True:
 
 			# Read each segment's header
 			chunk = DZChunk(self, self.dzfile)
-			self.addChunk(chunk)
+			self.chunks.append(chunk)
+
+			# check ordering
+			if last > chunk.getTargetStart():
+				disorder = True
+			last = chunk.getTargetStart()
 
 			# Would seeking the file to the end of the compressed
 			# data bring us to the end of the file, or beyond it?
@@ -524,6 +566,33 @@ class DZFile(DZStruct):
 
 			# Seek to next DZ header
 			self.dzfile.seek(next, io.SEEK_SET)
+
+		# If I'm perverse enough to think of this...
+		if disorder:
+			print("[ ] Warning: Found out of order chunks (please report)", file=sys.stderr)
+			self.chunks.sort(key=lambda c: c.getTargetStart())
+
+		try:
+			g = gpt.GPT(self.chunks[0].extract())
+
+			slice = DZSlice(self.chunks[0].getSliceName(), 0, g.dataStartLBA<<g.shiftLBA)
+			self.slices.append(slice)
+			self.sliceIdx[self.chunks[0].getSliceName()] = slice
+
+			for slice in g.slices:
+				new = DZSlice(slice.name, slice.startLBA<<g.shiftLBA, (slice.endLBA+1)<<g.shiftLBA)
+				self.slices.append(new)
+				self.sliceIdx[slice.name] = new
+
+			slice = DZSlice(self.chunks[-1].getSliceName(), g.dataEndLBA<<g.shiftLBA, (g.altLBA+1)<<g.shiftLBA)
+			self.slices.append(slice)
+			self.sliceIdx[self.chunks[-1].getSliceName()] = slice
+
+		except NoGPT:
+			pass
+
+		for chunk in self.chunks:
+			self.addChunk(chunk)
 
 	def checkValues(self):
 		"""
@@ -575,7 +644,10 @@ class DZFile(DZStruct):
 		else:
 			self.messages.add("[ ] No CRC32 of non-zero header areas found ({:08X})".format(self.crcHeaders))
 
-# HERE
+
+		if self.unknown0 == 256:
+			self.messages.add("[ ] unknown 0 is 256 like always (half blocksize?)")
+
 
 	def addChunk(self, chunk):
 		"""
@@ -594,7 +666,6 @@ class DZFile(DZStruct):
 			self.sliceIdx[name] = slice
 
 		# Add it
-		self.chunks.append(chunk)
 		slice.addChunk(chunk)
 
 	def display(self):
@@ -641,7 +712,7 @@ class DZFile(DZStruct):
 		if slice:
 			self.slices[slice].extractChunk(file, name, idx)
 		else:
-			self.chunks[idx].extract(file, name)
+			self.chunks[idx].extractChunk(file, name)
 
 	def extractSlice(self, file, name, idx):
 		"""
@@ -719,6 +790,7 @@ class DZFileTools:
 		group.add_argument('-s', '--single', help='Extract diskslice(s) (partition(s)) (all by default)', action='store_true', dest='extractSlice')
 		group.add_argument('-i', '--image', help='Extract all partitions as a disk image', action='store_true', dest='extractImage')
 		parser.add_argument('-o', '--out', help='Output location', action='store', dest='outdir')
+		parser.add_argument('-b', '--blocksize', help='Blocksize used on the device', action='store', dest='blocksize')
 
 		return parser.parse_known_args()
 
@@ -781,10 +853,26 @@ class DZFileTools:
 		args = self.parseArgs()
 		cmd = args[0]
 		files = args[1]
-		self.dz_file = DZFile(cmd.dzfile)
 
-		if "outdir" in cmd:
+		if cmd.outdir:
 			self.outdir = cmd.outdir
+
+		if cmd.blocksize:
+			cmd.blocksize = int(cmd.blocksize)
+			if cmd.blocksize & (cmd.blocksize-1):
+				print("[!] Error: Specified block size is not a power of 2", file=sys.stderr)
+				sys.exit(1)
+			size = cmd.blocksize
+			result = 0
+			shift = 32
+			while shift > 0:
+				if (size>>shift)>0:
+					size>>=shift
+					result+=shift
+				shift>>=1
+			self.shiftLBA = result
+
+		self.dz_file = DZFile(cmd.dzfile)
 
 		if cmd.listOnly:
 			self.cmdListPartitions()
