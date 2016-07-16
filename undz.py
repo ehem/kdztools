@@ -75,10 +75,6 @@ class DZChunk(DZStruct):
 	# Generate list of items that can be collapsed (truncated)
 	_dz_collapsibles = [n for n, (y, p) in _dz_chunk_dict.items() if p]
 
-	# Blocksize being used
-	shiftLBA = 9
-	sizeLBA = 1<<shiftLBA
-
 
 	def getChunkName(self):
 		"""
@@ -114,14 +110,13 @@ class DZChunk(DZStruct):
 		"""
 		Return the offset into the target storage medium where we start
 		"""
-		return self.targetAddr
+		return self.targetAddr << self.dz.shiftLBA
 
 	def getTargetEnd(self):
 		"""
 		Return the offset into the target storage medium where we end
 		"""
-		# hack, but works for the moment...
-		return self.targetAddr + self.targetSize
+		return (self.targetAddr << self.dz.shiftLBA) + self.targetSize
 
 	def getNext(self):
 		"""
@@ -162,10 +157,10 @@ class DZChunk(DZStruct):
 		"""
 
 		# Seek to the beginning of the compressed data in the specified partition
-		self.dzfile.seek(self.dataOffset, io.SEEK_SET)
+		self.dz.dzfile.seek(self.dataOffset, io.SEEK_SET)
 
 		# Read the whole compressed segment into RAM
-		zdata = self.dzfile.read(self.dataSize)
+		zdata = self.dz.dzfile.read(self.dataSize)
 
 		# Decompress the data
 		buf = zlib.decompress(zdata)
@@ -208,12 +203,12 @@ class DZChunk(DZStruct):
 		# Create a hole at the end of the wipe area
 		if file:
 			current = file.seek(0, io.SEEK_CUR)
-###
 #			# Ensure space is allocated to areas to be written
-#			for addr in range(0, (self.wipeCount<<self.shiftLBA), 1<<9)
-#				file.seek(current + addr, io.SEEK_CUR)
+#			for addr in range(self.wipeCount):
+#				file.seek(1<<self.dz.shiftLBA, io.SEEK_CUR)
 #				file.write(b'\x00')
-###
+#			file.seek(current, io.SEEK_SET)
+			# Makes the output the correct size, by filling as hole
 			file.truncate(current + (self.wipeCount<<self.shiftLBA))
 
 		# Write it to file
@@ -231,6 +226,9 @@ class DZChunk(DZStruct):
 		if self._dz_struct.size != self._dz_chunk_len:
 			print("[!] Internal error!  Chunk format wrong!", file=sys.stderr)
 			sys.exit(-1)
+
+		# Save a pointer to the DZFile
+		self.dz = dz
 
 		# Read a whole DZ header
 		buf = file.read(self._dz_chunk_len)
@@ -293,7 +291,7 @@ class DZChunk(DZStruct):
 		# Save off all the important data
 		self.sliceName	= dz_item['sliceName']
 		self.chunkName	= dz_item['chunkName']
-		self.targetAddr = dz_item['targetAddr'] << self.shiftLBA
+		self.targetAddr = dz_item['targetAddr']
 		self.targetSize	= dz_item['targetSize']
 		self.dataSize	= dz_item['dataSize']
 		self.md5	= dz_item['md5']
@@ -301,13 +299,10 @@ class DZChunk(DZStruct):
 		self.crc32	= dz_item['crc32']
 
 		# This is where in the image we're supposed to go
-		targetAddr = int(self.chunkName[len(self.sliceName)+1:-4]) << self.shiftLBA
+		targetAddr = int(self.chunkName[len(self.sliceName)+1:-4]) << self.dz.shiftLBA
 
-		if targetAddr != self.targetAddr:
+		if targetAddr != self.targetAddr<<self.dz.shiftLBA:
 			self.messages.append("[!] Uncompressed starting offset differs from chunk name!")
-
-		# Save the DZ file for later use
-		self.dzfile = file
 
 
 
@@ -402,7 +397,7 @@ class DZSlice(object):
 		# it is possible for chunks wipe area to extend beyond slice
 		file.truncate(self.getLength())
 
-	def __init__(self, name, start=0x7FFFFFFFFFFFFFFF, end=0):
+	def __init__(self, dz, name, start=0x7FFFFFFFFFFFFFFF, end=0):
 		"""
 		Initialize the instance of DZSlice class
 		"""
@@ -411,6 +406,9 @@ class DZSlice(object):
 		self.messages = set()
 		self.start = start
 		self.end = end
+
+		# Save a pointer to the DZFile
+		self.dz = dz
 
 
 
@@ -456,7 +454,7 @@ class DZFile(DZStruct):
 	# Generate list of items that can be collapsed (truncated)
 	_dz_collapsibles = [n for n, (y, p) in _dz_file_dict.items() if p]
 
-	def open(self, file):
+	def open(self, name):
 		"""
 		What do you expect? Open file and check the header
 		"""
@@ -467,7 +465,7 @@ class DZFile(DZStruct):
 			sys.exit(-1)
 
 		# Open the file
-		self.dzfile = io.FileIO(file, "rb")
+		self.dzfile = io.FileIO(name, "rb")
 
 		# Get length of whole file
 		self.length = self.dzfile.seek(0, io.SEEK_END)
@@ -573,18 +571,33 @@ class DZFile(DZStruct):
 			self.chunks.sort(key=lambda c: c.getTargetStart())
 
 		try:
+			emptycount = 0
 			g = gpt.GPT(self.chunks[0].extract())
 
-			slice = DZSlice(self.chunks[0].getSliceName(), 0, g.dataStartLBA<<g.shiftLBA)
+			self.shiftLBA = g.shiftLBA
+
+			next = g.dataStartLBA
+			slice = DZSlice(self, self.chunks[0].getSliceName(), 0, next<<g.shiftLBA)
 			self.slices.append(slice)
 			self.sliceIdx[self.chunks[0].getSliceName()] = slice
 
 			for slice in g.slices:
-				new = DZSlice(slice.name, slice.startLBA<<g.shiftLBA, (slice.endLBA+1)<<g.shiftLBA)
+				if next != slice.startLBA<<g.shiftLBA:
+					new = DZSlice(self, "_unallocated_" + str(emptycount), next<<g.shiftLBA, (slice.startLBA-1)<<g.shiftLBA)
+					self.slices.append(new)
+					emptycount += 1
+				next = (slice.endLBA+1)<<g.shiftLBA
+				new = DZSlice(self, slice.name, slice.startLBA<<g.shiftLBA, next)
 				self.slices.append(new)
 				self.sliceIdx[slice.name] = new
 
-			slice = DZSlice(self.chunks[-1].getSliceName(), g.dataEndLBA<<g.shiftLBA, (g.altLBA+1)<<g.shiftLBA)
+			if next != (g.dataEndLBA+1)<<g.shiftLBA:
+				new = DZSlice(self, "_unallocated_" + str(emptycount), next, g.dataEndLBA<<g.shiftLBA)
+				self.slices.append(new)
+				emptycount += 1
+				next = (g.dataEndLBA+1)<<g.shiftLBA
+
+			slice = DZSlice(self, self.chunks[-1].getSliceName(), g.dataEndLBA<<g.shiftLBA, (g.altLBA+1)<<g.shiftLBA)
 			self.slices.append(slice)
 			self.sliceIdx[self.chunks[-1].getSliceName()] = slice
 
@@ -661,7 +674,7 @@ class DZFile(DZStruct):
 			slice = self.sliceIdx[name]
 		else:
 # FIXME: what if chunks out of order?
-			slice = DZSlice(name)
+			slice = DZSlice(self, name)
 			self.slices.append(slice)
 			self.sliceIdx[name] = slice
 
@@ -737,7 +750,7 @@ class DZFile(DZStruct):
 		file = io.FileIO(name, "wb")
 		file.write(self.header)
 
-	def __init__(self, file):
+	def __init__(self, name):
 		"""
 		Constructing this class opens the file and loads map of chunks
 		"""
@@ -752,6 +765,10 @@ class DZFile(DZStruct):
 		# Hash of the headers for consistency checking
 		self.md5Headers = hashlib.md5()
 
+		# A reasonable default
+		# FIXME: need to do somehow do this better
+		self.shiftLBA = 9
+
 		# Hashes candidates for data in header area, all the chunk
 		# headers, all the payload data, or everything
 		self.crcHeaders = crc32(b"")
@@ -765,7 +782,7 @@ class DZFile(DZStruct):
 		self.crcAll = crc32(b"")
 		# try crc32 ?
 
-		self.open(file)
+		self.open(name)
 		self.loadChunks()
 		self.checkValues()
 
