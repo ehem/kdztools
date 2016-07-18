@@ -25,8 +25,6 @@ import io
 import zlib
 import argparse
 import hashlib
-from struct import Struct
-from collections import OrderedDict
 from binascii import crc32, b2a_hex
 import dz
 import gpt
