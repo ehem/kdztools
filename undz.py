@@ -236,6 +236,13 @@ class UNDZChunk(dz.DZChunk, UNDZUtils):
 		# Write it to file
 		file.write(self.extract())
 
+		if name[len(name)-len(self.chunkName):] == self.chunkName:
+			file = io.FileIO(self.chunkName + ".chunk", "wb")
+			self.dz.dzfile.seek(self.dataOffset-self._dz_length, io.SEEK_SET)
+			buffer = self.dz.dzfile.read(self.dataSize + self._dz_length)
+			file.write(buffer)
+			file.close()
+
 		# Print our messages
 		self.Messages()
 
@@ -663,12 +670,11 @@ class UNDZFile(dz.DZFile, UNDZUtils):
 			file.seek(slice.getStart(), io.SEEK_SET)
 			slice.extractSlice(file, name)
 
-	def saveHeader(self, dir):
+	def saveHeader(self):
 		"""
 		Dump the header from the original file into the output dir
 		"""
-		name = os.path.join(dir, ".header")
-		file = io.FileIO(name, "wb")
+		file = io.FileIO(".header", "wb")
 		file.write(self.header)
 
 	def __init__(self, name):
@@ -746,6 +752,8 @@ class DZFileTools:
 			print("[+] Extracting single chunk!\n")
 		else:
 			print("[+] Extracting {:d} chunks!\n".format(len(files)))
+
+		os.chdir(self.outdir)
 		for idx in files:
 			try:
 				idx = int(idx)
@@ -755,7 +763,7 @@ class DZFileTools:
 			if idx <= 0 or idx > self.dz_file.getChunkCount():
 				print("[!] Cannot extract out of range chunk {:d} (min=1 max={:d})".format(idx, len(self.dz_file.getChunkCount())), file=sys.stderr)
 				sys.exit(1)
-			name = os.path.join(self.outdir, self.dz_file.getChunkName(idx-1))
+			name = self.dz_file.getChunkName(idx-1)
 			file = io.FileIO(name, "wb")
 			self.dz_file.extractChunk(file, name, idx-1)
 
@@ -767,6 +775,8 @@ class DZFileTools:
 			print("[+] Extracting single slice^Wpartition!\n")
 		else:
 			print("[+] Extracting {:d} slices^Wpartitions!\n".format(len(files)))
+
+		os.chdir(self.outdir)
 		for idx in files:
 			try:
 				idx = int(idx)
@@ -777,7 +787,7 @@ class DZFileTools:
 				print("[!] Cannot extract out of range slice {:d} (min=1 max={:d})".format(idx, self.dz_file.getSliceCount()), file=sys.stderr)
 				sys.exit(1)
 			slice = self.dz_file.slices[idx-1]
-			name = os.path.join(self.outdir, slice.getSliceName() + ".img")
+			name = slice.getSliceName() + ".image"
 			file = io.FileIO(name, "wb")
 			self.dz_file.extractSlice(file, name, idx-1)
 
@@ -831,7 +841,7 @@ class DZFileTools:
 		elif cmd.extractImage:
 			self.cmdExtractImage(files)
 
-		self.dz_file.saveHeader(self.outdir)
+		self.dz_file.saveHeader()
 
 if __name__ == "__main__":
 	dztools = DZFileTools()
