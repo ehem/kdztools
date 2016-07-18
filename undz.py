@@ -751,7 +751,6 @@ class DZFileTools:
 		else:
 			print("[+] Extracting {:d} chunks!\n".format(len(files)))
 
-		os.chdir(self.outdir)
 		for idx in files:
 			try:
 				idx = int(idx)
@@ -774,7 +773,6 @@ class DZFileTools:
 		else:
 			print("[+] Extracting {:d} slices^Wpartitions!\n".format(len(files)))
 
-		os.chdir(self.outdir)
 		for idx in files:
 			try:
 				idx = int(idx)
@@ -793,7 +791,7 @@ class DZFileTools:
 		if len(files) > 0:
 			print("[!] Cannot specify specific portions to extract when outputting image", file=sys.stderr)
 			sys.exit(1)
-		name = os.path.join(self.outdir, "image.img")
+		name = "image.img"
 		file = io.FileIO(name, "wb")
 		self.dz_file.extractImage(file, name)
 
@@ -830,15 +828,22 @@ class DZFileTools:
 		if not os.path.exists(self.outdir):
 			os.makedirs(self.outdir)
 
+		# Change to the output directory
+		os.chdir(self.outdir)
+
+		# Extracting chunk(s)
 		if cmd.extractChunk:
 			self.cmdExtractChunk(files)
 
+		# Extracting slice(s)
 		elif cmd.extractSlice:
 			self.cmdExtractSlice(files)
 
+		# Extract the whole image
 		elif cmd.extractImage:
 			self.cmdExtractImage(files)
 
+		# Save the header for later reconstruction
 		self.dz_file.saveHeader()
 
 if __name__ == "__main__":
