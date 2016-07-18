@@ -28,52 +28,73 @@ import hashlib
 from struct import Struct
 from collections import OrderedDict
 from binascii import crc32, b2a_hex
+import dz
 import gpt
 
 
-class DZStruct(object):
+class UNDZUtils(object):
 	"""
-	Common class for areas with structure
+	Common class for unpacking DZ file structures
 	"""
-# 4 byte header
-# 512 byte length
-# OrderedDict layout out 512 bytes of stuff
+
+
+	def loadHeader(self, file):
+		"""
+		Loads a structured header, does common processing and returns
+		dictionary with data (buffer stored as "buffer")
+		"""
+
+		# Read the header structure
+		buffer = file.read(self._dz_length)
+
+
+		# "Make the item"
+		# Create a new dict using the keys from the format string
+		# and the format string itself
+		# and apply the format to the buffer
+		dz_item = dict(zip(
+			self._dz_format_dict.keys(),
+			self._dz_struct.unpack(buffer)
+		))
+
+		dz_item['buffer'] = buffer
+
+
+		# Verify DZ area header
+		if dz_item['header'] != self._dz_header:
+			print("[!] Bad DZ {:s} header!".format(self._dz_area), file=sys.stderr)
+			sys.exit(1)
+
+
+		# Collapse (truncate) each key's value if it's listed as collapsible
+		for key in self._dz_collapsibles:
+			if type(dz_item[key]) is str or type(dz_item[key]) is bytes:
+				dz_item[key] = dz_item[key].rstrip(b'\x00')
+				if b'\x00' in dz_item[key]:
+					print("[!] Error: extraneous data found IN "+key, file=sys.stderr)
+					sys.exit(1)
+			elif type(dz_item[key]) is int:
+				if dz_item[key] != 0:
+					print('[!] Error: field "'+key+'" is non-zero ('+hex(dz_item[key])+')', file=sys.stderr)
+					sys.exit(1)
+			else:
+				print("[!] Error: internal error", file=sys.stderr)
+				sys.exit(-1)
+
+		# To my knowledge this is supposed to be blank (for now...)
+		if len(dz_item['pad']) != 0:
+			print("[!] Error: pad is not empty", file=sys.stderr)
+			sys.exit(1)
+
+
+		return dz_item
 
 
 
-class DZChunk(DZStruct):
+class UNDZChunk(dz.DZChunk, UNDZUtils):
 	"""
 	Representation of an individual file chunk from a LGE DZ file
 	"""
-
-	_dz_chunk_header = b"\x30\x12\x95\x78"
-	_dz_chunk_len = 512
-
-	# Format string dict
-	#   itemName is the new dict key for the data to be stored under
-	#   formatString is the Python formatstring for struct.unpack()
-	#   collapse is boolean that controls whether extra \x00 's should be stripped
-	# Example:
-	#   ('itemName', ('formatString', collapse))
-	_dz_chunk_dict = OrderedDict([
-		('header',	('4s',   False)),	# magic number
-		('sliceName',	('32s',  True)),	# name of our slice
-		('chunkName',	('64s',  True)),	# name of our chunk
-		('targetSize',	('I',    False)),	# bytes of target area
-		('dataSize',	('I',    False)),	# amount of compressed
-		('md5',		('16s',  False)),	# MD5 of target image
-		('targetAddr',	('I',    False)),	# first block to write
-		('wipeCount',	('I',    False)),	# blocks to wipe before
-		('reserved',	('I',    True)),	# currently always zero
-		('crc32',	('I',    False)),	# CRC32 of target image
-		('pad',		('372s', True)),	# currently always zero
-	])
-
-	# Generate the struct for .unpack()
-	_dz_struct = Struct("<" + "".join([x[0] for x in _dz_chunk_dict.values()]))
-
-	# Generate list of items that can be collapsed (truncated)
-	_dz_collapsibles = [n for n, (y, p) in _dz_chunk_dict.items() if p]
 
 
 	def getChunkName(self):
@@ -203,13 +224,14 @@ class DZChunk(DZStruct):
 		# Create a hole at the end of the wipe area
 		if file:
 			current = file.seek(0, io.SEEK_CUR)
+
 #			# Ensure space is allocated to areas to be written
 #			for addr in range(self.wipeCount):
 #				file.seek(1<<self.dz.shiftLBA, io.SEEK_CUR)
 #				file.write(b'\x00')
 #			file.seek(current, io.SEEK_SET)
 			# Makes the output the correct size, by filling as hole
-			file.truncate(current + (self.wipeCount<<self.shiftLBA))
+			file.truncate(current + (self.wipeCount<<self.dz.shiftLBA))
 
 		# Write it to file
 		file.write(self.extract())
@@ -222,25 +244,13 @@ class DZChunk(DZStruct):
 		Loads the DZ header in the form as defined by self._dz_chunk_dict
 		"""
 
-		# Sanity check
-		if self._dz_struct.size != self._dz_chunk_len:
-			print("[!] Internal error!  Chunk format wrong!", file=sys.stderr)
-			sys.exit(-1)
+		super(UNDZChunk, self).__init__()
 
-		# Save a pointer to the DZFile
+		# Save a pointer to the UNDZFile
 		self.dz = dz
 
-		# Read a whole DZ header
-		buf = file.read(self._dz_chunk_len)
-
-		# "Make the item"
-		# Create a new dict using the keys from the format string
-		# and the format string itself
-		# and apply the format to the buffer
-		dz_item = dict(zip(
-			self._dz_chunk_dict.keys(),
-			self._dz_struct.unpack(buf)
-		))
+		# Load the header, does common checking
+		dz_item = self.loadHeader(file)
 
 		# used for warnings about the chunk
 		self.messages = []
@@ -249,40 +259,16 @@ class DZChunk(DZStruct):
 		# allows us to resolve where in the compressed data is
 		self.dataOffset = file.tell()
 
-		# Verify DZ sub-header
-		if dz_item['header'] != self._dz_chunk_header:
-			print("[!] Bad DZ chunk header!", file=sys.stderr)
-			sys.exit(1)
-
 		# Add ourselves to the hashes for checking
-		dz.md5Headers.update(buf)
+		dz.md5Headers.update(dz_item['buffer'])
 
 ### experiment, results negative
-		dz.crcHeaders = crc32(buf, dz.crcHeaders)
+		dz.crcHeaders = crc32(dz_item['buffer'], dz.crcHeaders)
 
-		dz.md5HeaderNZ.update(buf[0:-len(dz_item['pad'])])
-		dz.crcHeaderNZ=crc32(buf[0:-len(dz_item['pad'])], dz.crcHeaders)
+		dz.md5HeaderNZ.update(dz_item['buffer'][0:-len(dz_item['pad'])])
+		dz.crcHeaderNZ=crc32(dz_item['buffer'][0:-len(dz_item['pad'])], dz.crcHeaders)
 ### experiment, results negative
 
-		# Collapse (truncate) each key's value if it's listed as collapsible
-		for key in self._dz_collapsibles:
-			if type(dz_item[key]) is str or type(dz_item[key]) is bytes:
-				dz_item[key] = dz_item[key].rstrip(b'\x00')
-				if b'\x00' in dz_item[key]:
-					print("[!] Error: extraneous data found IN "+key, file=sys.stderr)
-					sys.exit(1)
-			elif type(dz_item[key]) is int:
-				if dz_item[key] != 0:
-					print('[!] Error: field "'+key+'" is non-zero ('+hex(dz_item[key])+')', file=sys.stderr)
-					sys.exit(1)
-			else:
-				print("[!] Error: internal error", file=sys.stderr)
-				sys.exit(-1)
-
-		# To my knowledge this is supposed to be blank (for now...)
-		if len(dz_item['pad']) != 0:
-			print("[!] Error: pad is not empty", file=sys.stderr)
-			sys.exit(1)
 
 		#
 		if dz_item['targetSize']&0x1FF != 0:
@@ -306,7 +292,7 @@ class DZChunk(DZStruct):
 
 
 
-class DZSlice(object):
+class UNDZSlice(object):
 	"""
 	Representation of a diskslice from a LGE DZ file
 	"""
@@ -399,70 +385,32 @@ class DZSlice(object):
 
 	def __init__(self, dz, name, start=0x7FFFFFFFFFFFFFFF, end=0):
 		"""
-		Initialize the instance of DZSlice class
+		Initialize the instance of UNDZSlice class
 		"""
+
+		super(UNDZSlice, self).__init__()
+
 		self.name = name
 		self.chunks = []
 		self.messages = set()
 		self.start = start
 		self.end = end
 
-		# Save a pointer to the DZFile
+		# Save a pointer to the UNDZFile
 		self.dz = dz
 
 
 
-class DZFile(DZStruct):
+class UNDZFile(dz.DZFile, UNDZUtils):
 	"""
 	Representation of the data parsed from a LGE DZ file
 	"""
 
-	_dz_header = b"\x32\x96\x18\x74"
-	_dz_head_len = 512
-
-	# Format string dict
-	#   itemName is the new dict key for the data to be stored under
-	#   formatString is the Python formatstring for struct.unpack()
-	#   collapse is boolean that controls whether extra \x00 's should be stripped
-	# Example:
-	#   ('itemName', ('formatString', collapse))
-	_dz_file_dict = OrderedDict([
-		('header',	('4s',   False)),	# magic number
-		('formatMajor',	('I',    False)),	# always 2 in LE
-		('formatMinor',	('I',    False)),	# always 1 in LE
-		('reserved0',	('I',    True)),	# format patchlevel?
-		('device',	('32s',  True)),
-		('version',	('144s', True)),	# "factoryversion"
-		('chunkCount',	('I',    False)),
-		('md5',		('16s',  False)),	# MD5 of chunk headers
-		('unknown0',	('I',    False)),
-		('reserved1',	('I',    True)),	# currently always zero
-		('unknown1',	('I',    False)),
-		('unknown2',	('16s',  False)),	# MD5 checksum?
-		('unknown3',	('48s',  False)),	# Id? windows thing?
-		('build_type',	('20s',  True)),	# "user"???
-		('unknown4',	('8s',   False)),	# version code?
-		('reserved2',	('I',    True)),	# currently always zero
-		('reserved3',	('H',    True)),	# padding?
-		('oldDateCode',	('10s',	 True)),	# prior firmware date?
-		('pad',		('180s', True)),	# currently always zero
-	])
-
-	# Generate the struct for .unpack()
-	_dz_struct = Struct("<" + "".join([x[0] for x in _dz_file_dict.values()]))
-
-	# Generate list of items that can be collapsed (truncated)
-	_dz_collapsibles = [n for n, (y, p) in _dz_file_dict.items() if p]
 
 	def open(self, name):
 		"""
 		What do you expect? Open file and check the header
 		"""
-
-		# Sanity check
-		if self._dz_struct.size != self._dz_head_len:
-			print("[!] Internal error!  Header format wrong!", file=sys.stderr)
-			sys.exit(-1)
 
 		# Open the file
 		self.dzfile = io.FileIO(name, "rb")
@@ -471,25 +419,12 @@ class DZFile(DZStruct):
 		self.length = self.dzfile.seek(0, io.SEEK_END)
 		self.dzfile.seek(0, io.SEEK_SET)
 
+
+		# Load the header, does common checking
+		dz_file = self.loadHeader(self.dzfile)
+
 		# Save the full header for rebuilding the file later
-		self.header = self.dzfile.read(self._dz_head_len)
-
-		# "Make the item"
-		# Create a new dict using the keys from the format string
-		# and the format string itself
-		# and apply the format to the buffer
-
-		dz_file = dict(zip(
-			self._dz_file_dict.keys(),
-			self._dz_struct.unpack(self.header)
-		))
-
-		# Verify DZ header
-		verify_header = dz_file['header']
-		if verify_header != self._dz_header:
-			print("[!] Error: Unsupported DZ file format.", file=sys.stderr)
-			print("[ ] Expected: {:s} ,\n\tbut received {:s} .".format(" ".join(hex(n) for n in self._dz_header), " ".join(hex(n) for n in verify_header)), file=sys.stderr)
-			sys.exit(1)
+		self.header = dz_file['buffer']
 
 		# Appears to be version numbers for the format
 		if dz_file['formatMajor'] > 2:
@@ -498,20 +433,6 @@ class DZFile(DZStruct):
 		elif dz_file['formatMinor'] > 1:
 			print("[!] Warning: DZ format more recent than previous versions, output unreliable", file=sys.stderr)
 
-		# Collapse (truncate) each key's value if it's listed as collapsible
-		for key in self._dz_collapsibles:
-			if type(dz_file[key]) is str or type(dz_file[key]) is bytes:
-				dz_file[key] = dz_file[key].rstrip(b'\x00')
-				if b'\x00' in dz_file[key]:
-					print("[!] Error: extraneous data found IN "+key, file=sys.stderr)
-					sys.exit(1)
-			elif type(dz_file[key]) is int:
-				if dz_file[key] != 0:
-					print('[!] Error: field "'+key+'" is non-zero ('+hex(dz_file[key])+')', file=sys.stderr)
-					sys.exit(1)
-			else:
-				print("[!] Error: internal error", file=sys.stderr)
-				sys.exit(-1)
 
 		self.chunkCount = dz_file['chunkCount']
 
@@ -548,7 +469,7 @@ class DZFile(DZStruct):
 		while True:
 
 			# Read each segment's header
-			chunk = DZChunk(self, self.dzfile)
+			chunk = UNDZChunk(self, self.dzfile)
 			self.chunks.append(chunk)
 
 			# check ordering
@@ -577,27 +498,27 @@ class DZFile(DZStruct):
 			self.shiftLBA = g.shiftLBA
 
 			next = g.dataStartLBA
-			slice = DZSlice(self, self.chunks[0].getSliceName(), 0, next<<g.shiftLBA)
+			slice = UNDZSlice(self, self.chunks[0].getSliceName(), 0, next<<g.shiftLBA)
 			self.slices.append(slice)
 			self.sliceIdx[self.chunks[0].getSliceName()] = slice
 
 			for slice in g.slices:
 				if next != slice.startLBA<<g.shiftLBA:
-					new = DZSlice(self, "_unallocated_" + str(emptycount), next<<g.shiftLBA, (slice.startLBA-1)<<g.shiftLBA)
+					new = UNDZSlice(self, "_unallocated_" + str(emptycount), next<<g.shiftLBA, (slice.startLBA-1)<<g.shiftLBA)
 					self.slices.append(new)
 					emptycount += 1
 				next = (slice.endLBA+1)<<g.shiftLBA
-				new = DZSlice(self, slice.name, slice.startLBA<<g.shiftLBA, next)
+				new = UNDZSlice(self, slice.name, slice.startLBA<<g.shiftLBA, next)
 				self.slices.append(new)
 				self.sliceIdx[slice.name] = new
 
 			if next != (g.dataEndLBA+1)<<g.shiftLBA:
-				new = DZSlice(self, "_unallocated_" + str(emptycount), next, g.dataEndLBA<<g.shiftLBA)
+				new = UNDZSlice(self, "_unallocated_" + str(emptycount), next, g.dataEndLBA<<g.shiftLBA)
 				self.slices.append(new)
 				emptycount += 1
 				next = (g.dataEndLBA+1)<<g.shiftLBA
 
-			slice = DZSlice(self, self.chunks[-1].getSliceName(), g.dataEndLBA<<g.shiftLBA, (g.altLBA+1)<<g.shiftLBA)
+			slice = UNDZSlice(self, self.chunks[-1].getSliceName(), g.dataEndLBA<<g.shiftLBA, (g.altLBA+1)<<g.shiftLBA)
 			self.slices.append(slice)
 			self.sliceIdx[self.chunks[-1].getSliceName()] = slice
 
@@ -674,7 +595,7 @@ class DZFile(DZStruct):
 			slice = self.sliceIdx[name]
 		else:
 # FIXME: what if chunks out of order?
-			slice = DZSlice(self, name)
+			slice = UNDZSlice(self, name)
 			self.slices.append(slice)
 			self.sliceIdx[name] = slice
 
@@ -754,6 +675,8 @@ class DZFile(DZStruct):
 		"""
 		Constructing this class opens the file and loads map of chunks
 		"""
+
+		super(UNDZFile, self).__init__()
 
 		self.slices = []
 		self.sliceIdx = {}
@@ -889,7 +812,7 @@ class DZFileTools:
 				shift>>=1
 			self.shiftLBA = result
 
-		self.dz_file = DZFile(cmd.dzfile)
+		self.dz_file = UNDZFile(cmd.dzfile)
 
 		if cmd.listOnly:
 			self.cmdListPartitions()
