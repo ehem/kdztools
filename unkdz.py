@@ -18,6 +18,7 @@ Copyright (C) 2013 IOMonster (thecubed on XDA)
 	along with this program.  If not, see <http://www.gnu.org/licenses/>.
 """
 
+from __future__ import print_function
 import os
 import argparse
 import sys
@@ -150,7 +151,7 @@ class KDZFileTools:
 
 	def parseArgs(self):
 		# Parse arguments
-		parser = argparse.ArgumentParser(description='LG KDZ File Extractor by IOMonster')
+		parser = argparse.ArgumentParser(description='LG KDZ File Extractor originally by IOMonster')
 		parser.add_argument('-f', '--file', help='KDZ File to read', action='store', required=True, dest='kdzfile')
 		group = parser.add_mutually_exclusive_group(required=True)
 		group.add_argument('-l', '--list', help='List partitions', action='store_true', dest='listOnly')
