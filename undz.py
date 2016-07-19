@@ -401,6 +401,9 @@ class UNDZSlice(object):
 		params.write(u"# this value may be crucial for success and dangerous to modify\n")
 		last = self.chunks[-1]
 		params.write(u"lastWipe={:d}\n".format((last.getTargetStart() >> self.dz.shiftLBA) + last.wipeCount))
+		params.write(u"# the block size is important (though not too likely to change in near future\n")
+		params.write(u"blockSize={:d}\n".format(1<<self.dz.shiftLBA))
+		params.write(u"blockShift={:d}\n".format(self.dz.shiftLBA))
 
 		params.close()
 
