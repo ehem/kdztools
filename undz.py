@@ -234,8 +234,8 @@ class UNDZChunk(dz.DZChunk, UNDZUtils):
 		# Write it to file
 		file.write(self.extract())
 
-		if name[len(name)-len(self.chunkName):] == self.chunkName:
-			file = io.FileIO(self.chunkName + ".chunk", "wb")
+		if name[len(name)-len(self.chunkName):] == self.chunkName.decode("utf8"):
+			file = io.FileIO(self.chunkName.decode("utf8") + ".chunk", "wb")
 			self.dz.dzfile.seek(self.dataOffset-self._dz_length, io.SEEK_SET)
 			buffer = self.dz.dzfile.read(self.dataSize + self._dz_length)
 			file.write(buffer)
