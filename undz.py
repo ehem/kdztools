@@ -369,6 +369,8 @@ class UNDZSlice(object):
 		"""
 
 		start = self.getStart()
+		end = self.getEnd()
+
 		for chunk in self.chunks:
 			cur = chunk.getTargetStart()
 			# Mostly happens for the backup GPT (large pad at start)
@@ -387,6 +389,20 @@ class UNDZSlice(object):
 
 		# it is possible for chunks wipe area to extend beyond slice
 		file.truncate(self.getLength())
+
+
+		# write a params file for saving values used during recreate
+		params = io.open(name + ".params", "wt")
+		params.write(u'# saved parameters for the file "{:s}"\n'.format(name))
+		params.write(u"startLBA={:d}\n".format(start >> self.dz.shiftLBA))
+		params.write(u"startAddr={:d}\n".format(start))
+		params.write(u"endLBA={:d}\n".format(end >> self.dz.shiftLBA))
+		params.write(u"endAddr={:d}\n".format(end))
+		params.write(u"# this value may be crucial for success and dangerous to modify\n")
+		last = self.chunks[-1]
+		params.write(u"lastWipe={:d}\n".format((last.getTargetStart() >> self.dz.shiftLBA) + last.wipeCount))
+
+		params.close()
 
 	def __init__(self, dz, name, start=0x7FFFFFFFFFFFFFFF, end=0):
 		"""
@@ -674,6 +690,7 @@ class UNDZFile(dz.DZFile, UNDZUtils):
 		"""
 		file = io.FileIO(".header", "wb")
 		file.write(self.header)
+		file.close()
 
 	def __init__(self, name):
 		"""
@@ -731,6 +748,7 @@ class DZFileTools:
 		group = parser.add_mutually_exclusive_group(required=True)
 		group.add_argument('-l', '--list', help='List partitions', action='store_true', dest='listOnly')
 		group.add_argument('-x', '--extract', help='Extract data chunk(s) (all by default)', action='store_true', dest='extractChunk')
+		group.add_argument('-c', '--chunks', help='Extract data chunk(s) (all by default)', action='store_true', dest='extractChunk')
 		group.add_argument('-s', '--single', help='Extract diskslice(s) (partition(s)) (all by default)', action='store_true', dest='extractSlice')
 		group.add_argument('-i', '--image', help='Extract all partitions as a disk image', action='store_true', dest='extractImage')
 		parser.add_argument('-o', '--out', help='Output location', action='store', dest='outdir')
@@ -763,6 +781,7 @@ class DZFileTools:
 			name = self.dz_file.getChunkName(idx-1)
 			file = io.FileIO(name, "wb")
 			self.dz_file.extractChunk(file, name, idx-1)
+			file.close()
 
 	def cmdExtractSlice(self, files):
 		if len(files) == 0:
@@ -786,6 +805,7 @@ class DZFileTools:
 			name = slice.getSliceName() + ".image"
 			file = io.FileIO(name, "wb")
 			self.dz_file.extractSlice(file, name, idx-1)
+			file.close()
 
 	def cmdExtractImage(self, files):
 		if len(files) > 0:
@@ -794,6 +814,7 @@ class DZFileTools:
 		name = "image.img"
 		file = io.FileIO(name, "wb")
 		self.dz_file.extractImage(file, name)
+		file.close()
 
 	def main(self):
 		args = self.parseArgs()
