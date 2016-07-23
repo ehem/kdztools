@@ -80,6 +80,10 @@ class Image2Chunks(dz.DZChunk):
 		self.paramsFile.close()
 		del self.paramsFile
 
+		if 'phantom' in params and params['phantom']:
+			print("[!] {:s} is a phantom slice, skipping!".format(name))
+			return False
+
 		for k in 'blockShift', 'startLBA', 'endLBA', 'lastWipe':
 			if k not in params:
 				print("Parameter value \"{:s}\" is missing, unable to continue".format(k))
@@ -90,6 +94,8 @@ class Image2Chunks(dz.DZChunk):
 		self.startLBA	= params['startLBA']
 		self.endLBA	= params['endLBA']
 		self.lastWipe	= params['lastWipe']
+
+		return True
 
 
 	def makeChunks(self, name):
@@ -111,11 +117,12 @@ class Image2Chunks(dz.DZChunk):
 			hole = (self.file.seek(current, SEEK_HOLE) + self.blockSize-1) & ~(self.blockSize-1)
 			# Python's handling of this condition is suboptimal
 			try:
-				next = (self.file.seek(hole, SEEK_DATA) + self.blockSize-1) & ~(self.blockSize-1)
+				next = self.file.seek(hole, SEEK_DATA) & ~(self.blockSize-1)
 				wipeCount = (next - current) >> self.blockShift
 			except IOError:
 				next = eof
 				wipeCount = self.lastWipe - targetAddr
+
 			md5 = hashlib.md5()
 			crc = crc32(b"")
 			zobj = zlib.compressobj(1)
@@ -123,6 +130,9 @@ class Image2Chunks(dz.DZChunk):
 
 			chunkName = baseName + str(targetAddr) + ".bin"
 			out = io.FileIO(chunkName + ".chunk", "wb")
+
+			print("[+] Compressing {:s} to {:s} ({:d} empty blocks)".format(name, chunkName, (next - hole) >> self.blockShift))
+
 			chunkName = chunkName.encode("utf8")
 			out.seek(self._dz_length, io.SEEK_SET)
 			zlen = 0
@@ -162,6 +172,8 @@ class Image2Chunks(dz.DZChunk):
 			current = next
 			targetAddr = self.startLBA + (current >> self.blockShift)
 
+		print("[+] done\n")
+
 
 	def __init__(self, name):
 		"""
@@ -172,9 +184,9 @@ class Image2Chunks(dz.DZChunk):
 
 		self.openFiles(name)
 
-		self.loadParams(name)
+		if self.loadParams(name):
 
-		self.makeChunks(name)
+			self.makeChunks(name)
 
 
 if __name__ == "__main__":
