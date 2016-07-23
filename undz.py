@@ -50,16 +50,13 @@ class UNDZUtils(object):
 		# Create a new dict using the keys from the format string
 		# and the format string itself
 		# and apply the format to the buffer
-		dz_item = dict(zip(
-			self._dz_format_dict.keys(),
-			self._dz_struct.unpack(buffer)
-		))
+		dz_item = self.unpackdict(buffer)
 
 		dz_item['buffer'] = buffer
 
 
 		# Verify DZ area header
-		if dz_item['header'] != self._dz_header:
+		if dz_item == None:
 			print("[!] Bad DZ {:s} header!".format(self._dz_area), file=sys.stderr)
 			sys.exit(1)
 
@@ -290,9 +287,9 @@ class UNDZChunk(dz.DZChunk, UNDZUtils):
 		self.crc32	= dz_item['crc32']
 
 		# This is where in the image we're supposed to go
-		targetAddr = int(self.chunkName[len(self.sliceName)+1:-4]) << self.dz.shiftLBA
+		targetAddr = int(self.chunkName[len(self.sliceName)+1:-4])
 
-		if targetAddr != self.targetAddr<<self.dz.shiftLBA:
+		if targetAddr != self.targetAddr:
 			self.messages.append("[!] Uncompressed starting offset differs from chunk name!")
 
 
@@ -399,11 +396,16 @@ class UNDZSlice(object):
 		params.write(u"endLBA={:d}\n".format(end >> self.dz.shiftLBA))
 		params.write(u"endAddr={:d}\n".format(end))
 		params.write(u"# this value may be crucial for success and dangerous to modify\n")
-		last = self.chunks[-1]
-		params.write(u"lastWipe={:d}\n".format((last.getTargetStart() >> self.dz.shiftLBA) + last.wipeCount))
-		params.write(u"# the block size is important (though not too likely to change in near future\n")
-		params.write(u"blockSize={:d}\n".format(1<<self.dz.shiftLBA))
-		params.write(u"blockShift={:d}\n".format(self.dz.shiftLBA))
+
+		if len(self.chunks) > 0:
+			last = self.chunks[-1]
+			params.write(u"lastWipe={:d}\n".format((last.getTargetStart() >> self.dz.shiftLBA) + last.wipeCount))
+			params.write(u"# the block size is important (though not too likely to change in near future\n")
+			params.write(u"blockSize={:d}\n".format(1<<self.dz.shiftLBA))
+			params.write(u"blockShift={:d}\n".format(self.dz.shiftLBA))
+		else:
+			params.write(u"# this is a phantom slice, no writes are done")
+			params.write(u"# (though it could be getting wiped)")
 
 		params.close()
 
@@ -749,13 +751,13 @@ class DZFileTools:
 		parser = argparse.ArgumentParser(description='LG Compressed DZ File Extractor originally by IOMonster')
 		parser.add_argument('-f', '--file', help='DZ File to read', action='store', required=True, dest='dzfile')
 		group = parser.add_mutually_exclusive_group(required=True)
-		group.add_argument('-l', '--list', help='List partitions', action='store_true', dest='listOnly')
-		group.add_argument('-x', '--extract', help='Extract data chunk(s) (all by default)', action='store_true', dest='extractChunk')
-		group.add_argument('-c', '--chunks', help='Extract data chunk(s) (all by default)', action='store_true', dest='extractChunk')
-		group.add_argument('-s', '--single', help='Extract diskslice(s) (partition(s)) (all by default)', action='store_true', dest='extractSlice')
-		group.add_argument('-i', '--image', help='Extract all partitions as a disk image', action='store_true', dest='extractImage')
-		parser.add_argument('-o', '--out', help='Output location', action='store', dest='outdir')
-		parser.add_argument('-b', '--blocksize', help='Blocksize used on the device', action='store', dest='blocksize')
+		group.add_argument('-l', '--list', help='list slices/partitions', action='store_true', dest='listOnly')
+		group.add_argument('-x', '--extract', help='extract data chunk(s) (all by default)', action='store_true', dest='extractChunk')
+		group.add_argument('-c', '--chunks', help='extract data chunk(s) (all by default)', action='store_true', dest='extractChunk')
+		group.add_argument('-s', '--single', help='extract diskslice(s) (partition(s)) (all by default)', action='store_true', dest='extractSlice')
+		group.add_argument('-i', '--image', help='extract all slices/partitions as a disk image', action='store_true', dest='extractImage')
+		parser.add_argument('-d', '--dir', '-o', '--out', help='output location', action='store', dest='outdir')
+		parser.add_argument('-b', '--blocksize', help='blocksize used on the device', action='store', dest='blocksize')
 
 		return parser.parse_known_args()
 

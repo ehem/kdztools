@@ -154,10 +154,10 @@ class KDZFileTools:
 		parser = argparse.ArgumentParser(description='LG KDZ File Extractor originally by IOMonster')
 		parser.add_argument('-f', '--file', help='KDZ File to read', action='store', required=True, dest='kdzfile')
 		group = parser.add_mutually_exclusive_group(required=True)
-		group.add_argument('-l', '--list', help='List partitions', action='store_true', dest='listOnly')
-		group.add_argument('-x', '--extract', help='Extract all partitions', action='store_true', dest='extractAll')
-		group.add_argument('-s', '--single', help='Single Extract by ID', action='store', dest='extractID', type=int)
-		parser.add_argument('-o', '--out', help='Output directory', action='store', dest='outdir')
+		group.add_argument('-l', '--list', help='list partitions', action='store_true', dest='listOnly')
+		group.add_argument('-x', '--extract', help='extract all partitions', action='store_true', dest='extractAll')
+		group.add_argument('-s', '--single', help='single Extract by ID', action='store', dest='extractID', type=int)
+		parser.add_argument('-d', '--dir', '-o', '--out', help='output directory', action='store', dest='outdir')
 
 		return parser.parse_args()
 

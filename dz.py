@@ -61,6 +61,46 @@ class DZStruct(object):
 			classy._dz_collapsibles = [n for n, (y, p) in classy._dz_format_dict.items() if p]
 
 
+	def packdict(self, din):
+		"""
+		Pack all the fields from the dict into a returned buffer
+		"""
+
+		dout = dict()
+
+		# pad any string keys that need padding
+		for k in self._dz_format_dict.keys():
+			if self._dz_format_dict[k][0][-1] == 's':
+				l = int(self._dz_format_dict[k][0][:-1])
+				dout[k] = (din[k] if k in din else "").ljust(l, b'\x00')
+			else:
+				dout[k] = din[k]
+
+		dout['header'] = self._dz_header
+
+		values = [dout[k] for k in self._dz_format_dict.keys()]
+		buffer = self._dz_struct.pack(*values)
+
+		return buffer
+
+
+	def unpackdict(self, buffer):
+		"""
+		Unpack data in buffer into a returned dictionary, return None
+		if magic number/header is absent
+		"""
+
+		d = dict(zip(
+			self._dz_format_dict.keys(),
+			self._dz_struct.unpack(buffer)
+		))
+
+		if d['header'] != self._dz_header:
+			return None
+
+		return d
+
+
 
 class DZChunk(DZStruct):
 	"""
