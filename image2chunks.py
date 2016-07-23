@@ -100,7 +100,7 @@ class Image2Chunks(dz.DZChunk):
 		os.chdir(os.path.dirname(name))
 		name = os.path.basename(name)
 		baseName = name.rpartition(".")[0] + "_"
-		sliceName = name.rpartition(".")[0].encode("utf8").ljust(int(self._dz_format_dict['sliceName'][0][:-1]), b'\x00')
+		sliceName = name.rpartition(".")[0].encode("utf8")
 
 		current = 0
 		targetAddr = self.startLBA
@@ -123,7 +123,7 @@ class Image2Chunks(dz.DZChunk):
 
 			chunkName = baseName + str(targetAddr) + ".bin"
 			out = io.FileIO(chunkName + ".chunk", "wb")
-			chunkName = chunkName.encode("utf8").ljust(int(self._dz_format_dict['chunkName'][0][:-1]), b'\x00')
+			chunkName = chunkName.encode("utf8")
 			out.seek(self._dz_length, io.SEEK_SET)
 			zlen = 0
 
@@ -144,7 +144,6 @@ class Image2Chunks(dz.DZChunk):
 			out.seek(0, io.SEEK_SET)
 
 			values = {
-				'header':	self._dz_header,
 				'sliceName':	sliceName,
 				'chunkName':	chunkName,
 				'targetSize':	hole - current,
@@ -154,11 +153,9 @@ class Image2Chunks(dz.DZChunk):
 				'targetAddr':	targetAddr,
 				'wipeCount':	wipeCount,
 				'crc32':	crc & 0xFFFFFFFF,
-				'pad':		b"".ljust(int(self._dz_format_dict['pad'][0][:-1]), b'\x00'),
 			}
 
-			values = [values[k] for k in self._dz_format_dict.keys()]
-			header = self._dz_struct.pack(*values)
+			header = self.packdict(values)
 			out.write(header)
 			out.close()
 
