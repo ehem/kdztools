@@ -112,12 +112,13 @@ class Image2Chunks(dz.DZChunk):
 			# Python's handling of this condition is suboptimal
 			try:
 				next = (self.file.seek(hole, SEEK_DATA) + self.blockSize-1) & ~(self.blockSize-1)
+				wipeCount = (next - current) >> self.blockShift
 			except IOError:
 				next = eof
-			wipeCount = (next - current) >> self.blockShift
+				wipeCount = self.lastWipe - targetAddr
 			md5 = hashlib.md5()
 			crc = crc32(b"")
-			zobj = zlib.compressobj()
+			zobj = zlib.compressobj(1)
 			self.file.seek(current, io.SEEK_SET)
 
 			chunkName = baseName + str(targetAddr) + ".bin"
@@ -146,13 +147,13 @@ class Image2Chunks(dz.DZChunk):
 				'header':	self._dz_header,
 				'sliceName':	sliceName,
 				'chunkName':	chunkName,
-				'targetSize':	(hole - current) >> self.blockShift,
+				'targetSize':	hole - current,
 				'reserved':	0,
 				'dataSize':	zlen,
 				'md5':		md5,
 				'targetAddr':	targetAddr,
 				'wipeCount':	wipeCount,
-				'crc32':	crc,
+				'crc32':	crc & 0xFFFFFFFF,
 				'pad':		b"".ljust(int(self._dz_format_dict['pad'][0][:-1]), b'\x00'),
 			}
 
@@ -161,8 +162,8 @@ class Image2Chunks(dz.DZChunk):
 			out.write(header)
 			out.close()
 
-			targetAddr += (hole - current) >> self.blockShift
 			current = next
+			targetAddr = self.startLBA + (current >> self.blockShift)
 
 
 	def __init__(self, name):
