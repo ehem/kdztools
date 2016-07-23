@@ -404,8 +404,9 @@ class UNDZSlice(object):
 			params.write(u"blockSize={:d}\n".format(1<<self.dz.shiftLBA))
 			params.write(u"blockShift={:d}\n".format(self.dz.shiftLBA))
 		else:
-			params.write(u"# this is a phantom slice, no writes are done")
-			params.write(u"# (though it could be getting wiped)")
+			params.write(u"phantom=1\n")
+			params.write(u"# this is a phantom slice, no writes are done\n")
+			params.write(u"# (though it could be getting wiped)\n")
 
 		params.close()
 
