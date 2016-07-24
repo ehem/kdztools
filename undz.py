@@ -70,7 +70,7 @@ class UNDZUtils(object):
 					sys.exit(1)
 			elif type(dz_item[key]) is int:
 				if dz_item[key] != 0:
-					print('[!] Error: field "'+key+'" is non-zero ('+hex(dz_item[key])+')', file=sys.stderr)
+					print('[!] Error: field "'+key+'" is non-zero ('+b2a_hex(dz_item[key])+')', file=sys.stderr)
 					sys.exit(1)
 			else:
 				print("[!] Error: internal error", file=sys.stderr)

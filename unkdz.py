@@ -22,8 +22,9 @@ from __future__ import print_function
 import os
 import argparse
 import sys
-from struct import *
+from struct import unpack
 from collections import OrderedDict
+from binascii import b2a_hex
 
 class KDZFileTools:
 	"""
@@ -174,12 +175,12 @@ class KDZFileTools:
 		verify_header = self.infile.read(4)
 		if verify_header != self.kdz_header:
 			print("[!] Error: Unsupported KDZ file format.")
-			print("[ ] Expected: %s ,\n\tbut received %s ." % (" ".join(hex(n) for n in self.kdz_header), " ".join(hex(n) for n in verify_header)))
+			print("[ ] Expected: {:s} ,\n\tbut received {:s} .".format(" ".join(b2a_hex(n) for n in self.kdz_header), " ".join(b2a_hex(n) for n in verify_header)))
 			sys.exit(1)
 		verify_header = self.infile.read(4)
 		if verify_header not in self.kdz_header2:
 			print("[!] Error: Unsupported KDZ file format.")
-			print("[ ] Bad second header,\n\treceived %s ." % (" ".join(hex(n) for n in verify_header)))
+			print("[ ] Bad second header,\n\treceived {:s} .".format(" ".join(b2a_hex(n) for n in verify_header)))
 			sys.exit(1)
 
 
@@ -197,7 +198,7 @@ class KDZFileTools:
 	def cmdListPartitions(self):
 		print("[+] KDZ Partition List\n=========================================")
 		for part in enumerate(self.partList):
-			print("%2d : %s (%d bytes)" % (part[0], part[1][0].decode("utf8"), part[1][1]))
+			print("{:2d} : {:s} ({:d} bytes)".format(part[0], part[1][0].decode("utf8"), part[1][1]))
 
 	def main(self):
 		args = self.parseArgs()
