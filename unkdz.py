@@ -214,8 +214,11 @@ class KDZFileTools:
 		if args.listOnly:
 			self.cmdListPartitions()
 
-		elif args.extractID != None and args.extractID >= 0:
-			self.cmdExtractSingle(args.extractID)
+		elif args.extractID != None:
+			if args.extractID >= 0 and args.extractID < len(self.partList):
+				self.cmdExtractSingle(args.extractID)
+			else:
+				print("[!] Segment {:d} is out of range!".format(args.extractID), file=sys.stderr)
 
 		elif args.extractAll:
 			self.cmdExtractAll()
