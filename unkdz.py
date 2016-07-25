@@ -26,6 +26,9 @@ from struct import unpack
 from collections import OrderedDict
 from binascii import b2a_hex
 
+# our tools are in "libexec"
+sys.path.append(os.path.join(sys.path[0], "libexec"))
+
 class KDZFileTools:
 	"""
 	LGE KDZ File tools

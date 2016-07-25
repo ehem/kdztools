@@ -26,6 +26,10 @@ import zlib
 import argparse
 import hashlib
 from binascii import crc32, b2a_hex
+
+# our tools are in "libexec"
+sys.path.append(os.path.join(sys.path[0], "libexec"))
+
 import dz
 import gpt
 
