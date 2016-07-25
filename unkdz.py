@@ -214,7 +214,7 @@ class KDZFileTools:
 		if args.listOnly:
 			self.cmdListPartitions()
 
-		elif args.extractID and args.extractID >= 0:
+		elif args.extractID != None and args.extractID >= 0:
 			self.cmdExtractSingle(args.extractID)
 
 		elif args.extractAll:
