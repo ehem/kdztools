@@ -235,12 +235,19 @@ class UNDZChunk(dz.DZChunk, UNDZUtils):
 		# Write it to file
 		file.write(self.extract())
 
-		if name[len(name)-len(self.chunkName):] == self.chunkName.decode("utf8"):
-			file = io.FileIO(self.chunkName.decode("utf8") + ".chunk", "wb")
-			self.dz.dzfile.seek(self.dataOffset-self._dz_length, io.SEEK_SET)
-			buffer = self.dz.dzfile.read(self.dataSize + self._dz_length)
-			file.write(buffer)
-			file.close()
+		# Print our messages
+		self.Messages()
+
+	def extractChunkfile(self, file, name):
+		"""
+		Extract the raw data of our chunk into the file with the name
+		"""
+
+		print("[+] Extracting {:s} to {:s}".format(self.chunkName.decode("utf8"), name))
+
+		self.dz.dzfile.seek(self.dataOffset-self._dz_length, io.SEEK_SET)
+		buffer = self.dz.dzfile.read(self.dataSize + self._dz_length)
+		file.write(buffer)
 
 		# Print our messages
 		self.Messages()
@@ -363,6 +370,12 @@ class UNDZSlice(object):
 		Extract a given chunk
 		"""
 		self.chunks[idx].extractChunk(file, name)
+
+	def extractChunkfile(self, file, name, idx):
+		"""
+		Extract a given chunk
+		"""
+		self.chunks[idx].extractChunkfile(file, name)
 
 	def extractSlice(self, file, name):
 		"""
@@ -679,6 +692,15 @@ class UNDZFile(dz.DZFile, UNDZUtils):
 		else:
 			self.chunks[idx].extractChunk(file, name)
 
+	def extractChunkfile(self, file, name, idx, slice=None):
+		"""
+		Extract a given chunkfile
+		"""
+		if slice:
+			self.slices[slice].extractChunkfile(file, name, idx)
+		else:
+			self.chunks[idx].extractChunkfile(file, name)
+
 	def extractSlice(self, file, name, idx):
 		"""
 		Extract the whole slice to the FileIO file named name
@@ -757,8 +779,8 @@ class DZFileTools:
 		parser.add_argument('-f', '--file', help='DZ File to read', action='store', required=True, dest='dzfile')
 		group = parser.add_mutually_exclusive_group(required=True)
 		group.add_argument('-l', '--list', help='list slices/partitions', action='store_true', dest='listOnly')
-		group.add_argument('-x', '--extract', help='extract data chunk(s) (all by default)', action='store_true', dest='extractChunk')
-		group.add_argument('-c', '--chunks', help='extract data chunk(s) (all by default)', action='store_true', dest='extractChunk')
+		group.add_argument('-x', '--extract', help='extract chunk-file(s) for reconstruction (all by default)', action='store_true', dest='extractChunkfile')
+		group.add_argument('-c', '--chunk', help='extract data chunk(s) (all by default)', action='store_true', dest='extractChunk')
 		group.add_argument('-s', '--single', help='extract diskslice(s) (partition(s)) (all by default)', action='store_true', dest='extractSlice')
 		group.add_argument('-i', '--image', help='extract all slices/partitions as a disk image', action='store_true', dest='extractImage')
 		parser.add_argument('-d', '--dir', '-o', '--out', help='output location', action='store', dest='outdir')
@@ -791,6 +813,29 @@ class DZFileTools:
 			name = self.dz_file.getChunkName(idx-1)
 			file = io.FileIO(name, "wb")
 			self.dz_file.extractChunk(file, name, idx-1)
+			file.close()
+
+	def cmdExtractChunkfile(self, files):
+		if len(files) == 0:
+			print("[+] Extracting all chunkfiles!\n")
+			files = range(1, self.dz_file.getChunkCount()+1)
+		elif len(files) == 1:
+			print("[+] Extracting single chunkfile!\n")
+		else:
+			print("[+] Extracting {:d} chunkfiles!\n".format(len(files)))
+
+		for idx in files:
+			try:
+				idx = int(idx)
+			except ValueError:
+				print('[!] Bad value "{:s}" (must be number)'.format(idx), file=sys.stderr)
+				sys.exit(1)
+			if idx <= 0 or idx > self.dz_file.getChunkCount():
+				print("[!] Cannot extract out of range chunkfile {:d} (min=1 max={:d})".format(idx, len(self.dz_file.getChunkCount())), file=sys.stderr)
+				sys.exit(1)
+			name = self.dz_file.getChunkName(idx-1) + ".chunk"
+			file = io.FileIO(name, "wb")
+			self.dz_file.extractChunkfile(file, name, idx-1)
 			file.close()
 
 	def cmdExtractSlice(self, files):
@@ -862,17 +907,21 @@ class DZFileTools:
 		# Change to the output directory
 		os.chdir(self.outdir)
 
-		# Extracting chunk(s)
-		if cmd.extractChunk:
-			self.cmdExtractChunk(files)
-
 		# Extracting slice(s)
-		elif cmd.extractSlice:
+		if cmd.extractSlice:
 			self.cmdExtractSlice(files)
+
+		# Extracting chunk-files(s)
+		elif cmd.extractChunkfile:
+			self.cmdExtractChunkfile(files)
 
 		# Extract the whole image
 		elif cmd.extractImage:
 			self.cmdExtractImage(files)
+
+		# Extracting chunk(s)
+		elif cmd.extractChunk:
+			self.cmdExtractChunk(files)
 
 		# Save the header for later reconstruction
 		self.dz_file.saveHeader()
