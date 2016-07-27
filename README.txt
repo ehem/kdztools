@@ -402,8 +402,8 @@ $ mkdz -f test.dz -d out -m
 [+] Writing BackupGPT_122141696.bin.chunk to test.dz (5693 bytes)
 $ 
 
-At this point if test.dz is compared to the original H90120e_00_0316.kdz, they
-should be identical.  As stated above, this has only been shown to produce an
+At this point if test.dz is compared to the original H90120e_00.dz, they should
+be identical.  As stated above, this has only been shown to produce an
 identical file when operating on Linux and using EXT4.  EXT2/3 may also work if
 mounted using the EXT4's backwards compatibility mode, rather than the native
 implementation of EXT2/3.  Most other flavors of Unix should get sane output,
