@@ -163,11 +163,10 @@ class DZFile(DZStruct):
 		('md5',		('16s',  False)),	# MD5 of chunk headers
 		('unknown0',	('I',    False)),
 		('reserved1',	('I',    True)),	# currently always zero
-		('unknown1',	('I',    False)),
-		('unknown2',	('16s',  False)),	# MD5 checksum?
-		('unknown3',	('48s',  False)),	# Id? windows thing?
+		('unknown1',	('20s',  False)),	#unknown, need to know!
+		('unknown2',	('48s',  False)),	# Id? windows thing?
 		('build_type',	('20s',  True)),	# "user"???
-		('unknown4',	('8s',   False)),	# version code?
+		('unknown3',	('8s',   False)),	# version code?
 		('reserved2',	('I',    True)),	# currently always zero
 		('reserved3',	('H',    True)),	# padding?
 		('oldDateCode',	('10s',	 True)),	# prior firmware date?
