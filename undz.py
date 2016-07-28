@@ -498,7 +498,6 @@ class UNDZFile(dz.DZFile, UNDZUtils):
 		self.unknown1 = dz_file['unknown1']
 		self.unknown2 = dz_file['unknown2']
 		self.unknown3 = dz_file['unknown3']
-		self.unknown4 = dz_file['unknown4']
 
 
 	def loadChunks(self):
