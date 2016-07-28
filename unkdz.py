@@ -29,6 +29,7 @@ from binascii import b2a_hex
 # our tools are in "libexec"
 sys.path.append(os.path.join(sys.path[0], "libexec"))
 
+
 class KDZFileTools:
 	"""
 	LGE KDZ File tools
@@ -50,12 +51,12 @@ class KDZFileTools:
 	# Example:
 	#   ('itemName', ('formatString', collapse))
 	kdz_sub_dict = OrderedDict([
-	  ('name',    ('32s',  True)),
-	  ('pad',     ('224s', True)),
-	  ('length',  ('I',    False)),
-	  ('unknow1', ('I',    False)),
-	  ('offset',  ('I',    False)),
-	  ('unknow2', ('I',    False))
+		('name',	('32s',  True)),
+		('pad',		('224s', True)),
+		('length',	('I',    False)),
+		('reserved0',	('I',    True)),	# currently always zero
+		('offset',	('I',    False)),
+		('reserved1',	('I',    True)),	# currently always zero
 	])
 
 	# Generate the formatstring for struct.unpack()
@@ -77,19 +78,30 @@ class KDZFileTools:
 		# Create a new dict using the keys from the format string
 		# and the format string itself
 		# and apply the format to the buffer
-		kdz_item = dict(
-			zip(
-				self.kdz_sub_dict.keys(),
-				unpack(self.kdz_formatstring,buf)
-			)
-		)
+		kdz_item = dict(zip(
+			self.kdz_sub_dict.keys(),
+			unpack(self.kdz_formatstring,buf)
+		))
 
 		# Collapse (truncate) each key's value if it's listed as collapsible
 		for key in self.kdz_collapsibles:
-			kdz_item[key] = kdz_item[key].rstrip(b'\x00')
-			if b'\x00' in kdz_item[key]:
-				print("[!] Error: extraneous data found IN "+key)
-				sys.exit(1)
+			if type(kdz_item[key]) is str or type(kdz_item[key]) is bytes:
+				kdz_item[key] = kdz_item[key].rstrip(b'\x00')
+				if b'\x00' in kdz_item[key]:
+					print("[!] Error: extraneous data found IN "+key, file=sys.stderr)
+					sys.exit(1)
+			elif type(kdz_item[key]) is int:
+				if kdz_item[key] != 0:
+					print('[!] Error: field "'+key+'" is non-zero ('+b2a_hex(kdz_item[key])+')', file=sys.stderr)
+					sys.exit(1)
+			else:
+				print("[!] Error: internal error", file=sys.stderr)
+				sys.exit(-1)
+
+		# To my knowledge this is supposed to be blank (for now...)
+		if len(kdz_item['pad']) != 0:
+			print("[!] Error: pad is not empty", file=sys.stderr)
+			sys.exit(1)
 
 		return kdz_item
 
@@ -137,9 +149,9 @@ class KDZFileTools:
 
 		# uncomment to prevent runaways
 		#for x in xrange(10):
-		
+
 		while True:
-		
+
 			# Read file in 1024 byte chunks
 			outfile.write(self.infile.read(chunkSize))
 
