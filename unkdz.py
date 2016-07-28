@@ -109,7 +109,13 @@ class KDZFileTools:
 		"""
 		Returns the list of partitions from a KDZ file containing multiple segments
 		"""
-		while True:
+
+		# Setup initial values
+		last = False
+		cont = not last
+		self.dataStart = 1<<63
+
+		while cont:
 
 			# Read the current KDZ header
 			kdz_sub = self.readKDZHeader()
@@ -117,12 +123,33 @@ class KDZFileTools:
 			# Add it to our list
 			self.partitions.append(kdz_sub)
 
-			# Is there another KDZ header?
-			if self.infile.read(4) == b"\x00\x00\x00\x00":
-				break
+			# Update start of data, if needed
+			if kdz_sub['offset'] < self.dataStart:
+				self.dataStart = kdz_sub['offset']
 
-			# Rewind file pointer 4 bytes
-			self.infile.seek(-4,1)
+			# Was it the last one?
+			cont = not last
+
+			# Check for end of headers
+			nextchar = self.infile.read(1)
+			# Is this the last KDZ header? (ctrl-C, how appropos)
+			if nextchar == b'\x03':
+				last = True
+			# Alternative, immediate end
+			elif nextchar == b'\x00':
+				cont = False
+			# Rewind file pointer 1 byte
+			else:
+				self.infile.seek(-1, os.SEEK_CUR)
+
+		# Record where headers end
+		self.headerEnd = self.infile.tell()
+
+		# Paranoia check for an updated file format
+		buf = self.infile.read(self.dataStart - self.headerEnd - 1)
+		if len(buf.lstrip(b'\x00')) > 0:
+			print("[!] Error: Data between headers and payload! (offsets {:d} to {:d})".format(self.headerEnd, self.dataStart), file=sys.stderr)
+			sys.exit(-1)
 
 		# Make partition list
 		return [(x['name'],x['length']) for x in self.partitions]
@@ -135,7 +162,7 @@ class KDZFileTools:
 		currentPartition = self.partitions[index]
 
 		# Seek to the beginning of the compressed data in the specified partition
-		self.infile.seek(currentPartition['offset'])
+		self.infile.seek(currentPartition['offset'], os.SEEK_SET)
 
 		# Ensure that the output directory exists
 		if not os.path.exists(self.outdir):
@@ -183,8 +210,9 @@ class KDZFileTools:
 
 		# Get length of whole file
 		self.infile.seek(0, os.SEEK_END)
+		# os.seek() doesn't return current position?!
 		self.kdz_length = self.infile.tell()
-		self.infile.seek(0)
+		self.infile.seek(0, os.SEEK_SET)
 
 		# Verify KDZ header
 		verify_header = self.infile.read(4)
