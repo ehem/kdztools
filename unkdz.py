@@ -40,8 +40,12 @@ class KDZFileTools:
 	outdir = "kdzextracted"
 	infile = None
 
-	kdz_header = b"\x28\x05\x00\x00"
-	kdz_header2 = { b"\x34\x31\x25\x80": "1", b"\x24\x38\x22\x25": "2" }
+	kdz_header = {
+		b"\x28\x05\x00\x00"b"\x34\x31\x25\x80":	"1",
+		b"\x18\x05\x00\x00"b"\x32\x79\x44\x50":	"1.99",
+		b"\x28\x05\x00\x00"b"\x24\x38\x22\x25":	"2",
+	}
+
 	kdz_sub_len = 272
 
 	# Format string dict
@@ -215,31 +219,29 @@ class KDZFileTools:
 		self.infile.seek(0, os.SEEK_SET)
 
 		# Verify KDZ header
-		verify_header = self.infile.read(4)
-		if verify_header != self.kdz_header:
+		verify_header = self.infile.read(8)
+
+		if verify_header not in self.kdz_header:
 			print("[!] Error: Unsupported KDZ file format.")
-			print("[ ] Expected: {:s} ,\n\tbut received {:s} .".format(" ".join(b2a_hex(n) for n in self.kdz_header), " ".join(b2a_hex(n) for n in verify_header)))
+			print('[ ] Received header "{:s}".'.format("".join(b2a_hex(n) for n in self.kdz_header)))
 			sys.exit(1)
-		verify_header = self.infile.read(4)
-		if verify_header not in self.kdz_header2:
-			print("[!] Error: Unsupported KDZ file format.")
-			print("[ ] Bad second header,\n\treceived {:s} .".format(" ".join(b2a_hex(n) for n in verify_header)))
-			sys.exit(1)
+
+		self.header_type = self.kdz_header[verify_header]
 
 
 	def cmdExtractSingle(self, partID):
-		print("[+] Extracting single partition!\n")
+		print("[+] Extracting single partition from v{:s} file!\n".format(self.header_type))
 		print("[+] Extracting " + str(self.partList[partID][0]) + " to " + os.path.join(self.outdir,self.partList[partID][0].decode("utf8")))
 		self.extractPartition(partID)
 
 	def cmdExtractAll(self):
-		print("[+] Extracting all partitions!\n")
+		print("[+] Extracting all partitions from v{:s} file!\n".format(self.header_type))
 		for part in enumerate(self.partList):
 			print("[+] Extracting " + part[1][0].decode("utf8") + " to " + os.path.join(self.outdir,part[1][0].decode("utf8")))
 			self.extractPartition(part[0])
 
 	def cmdListPartitions(self):
-		print("[+] KDZ Partition List\n=========================================")
+		print("[+] KDZ Partition List (format v{:s})\n=========================================".format(self.header_type))
 		for part in enumerate(self.partList):
 			print("{:2d} : {:s} ({:d} bytes)".format(part[0], part[1][0].decode("utf8"), part[1][1]))
 
