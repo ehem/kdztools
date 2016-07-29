@@ -41,9 +41,9 @@ class KDZFileTools(kdz.KDZFile):
 	infile = None
 
 	kdz_header = {
-		b"\x28\x05\x00\x00"b"\x34\x31\x25\x80":	"1",
-		b"\x18\x05\x00\x00"b"\x32\x79\x44\x50":	"1.99",
-		kdz.KDZFile._dz_header:			"2",
+		b"\x28\x05\x00\x00"b"\x34\x31\x25\x80":	0,
+		b"\x18\x05\x00\x00"b"\x32\x79\x44\x50":	1,
+		kdz.KDZFile._dz_header:			2,
 	}
 
 
@@ -181,9 +181,12 @@ class KDZFileTools(kdz.KDZFile):
 
 		params = open(os.path.join(self.outdir, ".params"), "wb")
 		params.write(u'# saved parameters from the file "{:s}"\n'.format(self.kdzfile).encode("utf8"))
-		params.write(u"version={:s}\n".format(self.header_type).encode("utf8"))
+		params.write(u"version={:d}\n".format(self.header_type).encode("utf8"))
+		params.write(b"# note, this is actually quite fluid, dataStart just needs to be large enough\n")
+		params.write(b"# for headers not to overwrite data; roughly 16 bytes for overhead plus 272\n")
+		params.write(b"# bytes per file should be sufficient (but not match original)\n")
 		params.write(u"dataStart={:d}\n".format(self.dataStart).encode("utf8"))
-		params.write(u"# embedded files\n".encode("utf8"))
+		params.write(b"# embedded files\n")
 
 		out = []
 		i = 0
@@ -228,26 +231,26 @@ class KDZFileTools(kdz.KDZFile):
 
 		if verify_header not in self.kdz_header:
 			print("[!] Error: Unsupported KDZ file format.")
-			print('[ ] Received header "{:s}".'.format("".join(b2a_hex(n) for n in self.kdz_header)))
+			print('[ ] Received header "{:s}".'.format(" ".join(b2a_hex(n) for n in verify_header)))
 			sys.exit(1)
 
 		self.header_type = self.kdz_header[verify_header]
 
 
 	def cmdExtractSingle(self, partID):
-		print("[+] Extracting single partition from v{:s} file!\n".format(self.header_type))
+		print("[+] Extracting single partition from v{:d} file!\n".format(self.header_type))
 		print("[+] Extracting " + str(self.partList[partID][0]) + " to " + os.path.join(self.outdir,self.partList[partID][0].decode("utf8")))
 		self.extractPartition(partID)
 
 	def cmdExtractAll(self):
-		print("[+] Extracting all partitions from v{:s} file!\n".format(self.header_type))
+		print("[+] Extracting all partitions from v{:d} file!\n".format(self.header_type))
 		for part in enumerate(self.partList):
 			print("[+] Extracting " + part[1][0].decode("utf8") + " to " + os.path.join(self.outdir,part[1][0].decode("utf8")))
 			self.extractPartition(part[0])
 		self.saveParams()
 
 	def cmdListPartitions(self):
-		print("[+] KDZ Partition List (format v{:s})\n=========================================".format(self.header_type))
+		print("[+] KDZ Partition List (format v{:d})\n=========================================".format(self.header_type))
 		for part in enumerate(self.partList):
 			print("{:2d} : {:s} ({:d} bytes)".format(part[0], part[1][0].decode("utf8"), part[1][1]))
 
