@@ -29,8 +29,10 @@ from binascii import b2a_hex
 # our tools are in "libexec"
 sys.path.append(os.path.join(sys.path[0], "libexec"))
 
+import kdz
 
-class KDZFileTools:
+
+class KDZFileTools(kdz.KDZFile):
 	"""
 	LGE KDZ File tools
 	"""
@@ -46,49 +48,27 @@ class KDZFileTools:
 		b"\x28\x05\x00\x00"b"\x24\x38\x22\x25":	"2",
 	}
 
-	kdz_sub_len = 272
-
-	# Format string dict
-	#   itemName is the new dict key for the data to be stored under
-	#   formatString is the Python formatstring for struct.unpack()
-	#   collapse is boolean that controls whether extra \x00 's should be stripped
-	# Example:
-	#   ('itemName', ('formatString', collapse))
-	kdz_sub_dict = OrderedDict([
-		('name',	('32s',  True)),
-		('pad',		('224s', True)),
-		('length',	('I',    False)),
-		('reserved0',	('I',    True)),	# currently always zero
-		('offset',	('I',    False)),
-		('reserved1',	('I',    True)),	# currently always zero
-	])
-
-	# Generate the formatstring for struct.unpack()
-	kdz_formatstring = " ".join([x[0] for x in kdz_sub_dict.values()])
-
-	# Generate list of items that can be collapsed (truncated)
-	kdz_collapsibles = [x[0] for x in kdz_sub_dict.items() if x[1][1]]
 
 	def readKDZHeader(self):
 		"""
 		Reads the KDZ header, and returns a single kdz_item
-		in the form as defined by self.kdz_sub_dict
+		in the form as defined by self._dz_format_dict
 		"""
 
 		# Read a whole DZ header
-		buf = self.infile.read(self.kdz_sub_len)
+		buf = self.infile.read(self._dz_length)
 
 		# "Make the item"
 		# Create a new dict using the keys from the format string
 		# and the format string itself
 		# and apply the format to the buffer
 		kdz_item = dict(zip(
-			self.kdz_sub_dict.keys(),
-			unpack(self.kdz_formatstring,buf)
+			self._dz_format_dict.keys(),
+			self._dz_struct.unpack(buf)
 		))
 
 		# Collapse (truncate) each key's value if it's listed as collapsible
-		for key in self.kdz_collapsibles:
+		for key in self._dz_collapsibles:
 			if type(kdz_item[key]) is str or type(kdz_item[key]) is bytes:
 				kdz_item[key] = kdz_item[key].rstrip(b'\x00')
 				if b'\x00' in kdz_item[key]:
