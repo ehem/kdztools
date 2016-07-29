@@ -276,10 +276,12 @@ class UNDZChunk(dz.DZChunk, UNDZUtils):
 		dz.md5Headers.update(dz_item['buffer'])
 
 ### experiment, results negative
-		dz.crcHeaders = crc32(dz_item['buffer'], dz.crcHeaders)
-
-		dz.md5HeaderNZ.update(dz_item['buffer'][0:-len(dz_item['pad'])])
-		dz.crcHeaderNZ=crc32(dz_item['buffer'][0:-len(dz_item['pad'])], dz.crcHeaders)
+#		dz.sha1Headers.update(dz_item['buffer'])
+#
+#		dz.crcHeaders = crc32(dz_item['buffer'], dz.crcHeaders)
+#
+#		dz.md5HeaderNZ.update(dz_item['buffer'][0:-len(dz_item['pad'])])
+#		dz.crcHeaderNZ=crc32(dz_item['buffer'][0:-len(dz_item['pad'])], dz.crcHeaders)
 ### experiment, results negative
 
 
@@ -740,7 +742,7 @@ class UNDZFile(dz.DZFile, UNDZUtils):
 		self.messages = set()
 
 		# Hash of the headers for consistency checking
-		self.md5Headers = hashlib.md5()
+		self.md5Headers = hashlib.new("md5")
 
 		# A reasonable default
 		# FIXME: need to do somehow do this better
@@ -748,16 +750,17 @@ class UNDZFile(dz.DZFile, UNDZUtils):
 
 		# Hashes candidates for data in header area, all the chunk
 		# headers, all the payload data, or everything
-		self.crcHeaders = crc32(b"")
-		self.md5HeaderNZ = hashlib.md5()
-		self.crcHeaderNZ = crc32(b"")
-		self.md5Payload = hashlib.md5()
-		self.crcPayload = crc32(b"")
-		self.md5Image = hashlib.md5()
-		self.crcImage = crc32(b"")
-		self.md5All = hashlib.md5()
-		self.crcAll = crc32(b"")
-		# try crc32 ?
+#		self.sha1Headers = hashlib.new("sha1")
+#		self.crcHeaders = crc32(b"")
+#		self.md5HeaderNZ = hashlib.md5()
+#		self.crcHeaderNZ = crc32(b"")
+#		self.md5Payload = hashlib.md5()
+#		self.crcPayload = crc32(b"")
+#		self.md5Image = hashlib.md5()
+#		self.crcImage = crc32(b"")
+#		self.md5All = hashlib.md5()
+#		self.crcAll = crc32(b"")
+#		# try crc32 ?
 
 		self.open(name)
 		self.loadChunks()
