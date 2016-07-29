@@ -72,7 +72,7 @@ class DZStruct(object):
 		for k in self._dz_format_dict.keys():
 			if self._dz_format_dict[k][0][-1] == 's':
 				l = int(self._dz_format_dict[k][0][:-1])
-				dout[k] = (din[k] if k in din else "").ljust(l, b'\x00')
+				dout[k] = (din[k] if k in din else b"").ljust(l, b'\x00')
 			else:
 				dout[k] = din[k]
 

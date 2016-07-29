@@ -180,10 +180,10 @@ class KDZFileTools(kdz.KDZFile):
 		"""
 
 		params = open(os.path.join(self.outdir, ".params"), "wb")
-		params.write(u'# saved parameters from the file "{:s}"\n'.format(self.kdzfile))
-		params.write(u"version={:s}\n".format(self.header_type))
-		params.write(u"dataStart={:d}\n".format(self.dataStart))
-		params.write(u"# embedded files\n")
+		params.write(u'# saved parameters from the file "{:s}"\n'.format(self.kdzfile).encode("utf8"))
+		params.write(u"version={:s}\n".format(self.header_type).encode("utf8"))
+		params.write(u"dataStart={:d}\n".format(self.dataStart).encode("utf8"))
+		params.write(u"# embedded files\n".encode("utf8"))
 
 		out = []
 		i = 0
@@ -195,8 +195,8 @@ class KDZFileTools(kdz.KDZFile):
 
 		i = 0
 		for p in out:
-			params.write(u"payload{:d}={:s}\n".format(i, p['name']))
-			params.write(u"payload{:d}head={:d}\n".format(i, p['header']))
+			params.write(u"payload{:d}={:s}\n".format(i, p['name'].decode("utf8")).encode("utf8"))
+			params.write(u"payload{:d}head={:d}\n".format(i, p['header']).encode("utf8"))
 			i += 1
 
 		params.close()
