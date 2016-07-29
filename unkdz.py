@@ -22,8 +22,6 @@ from __future__ import print_function
 import os
 import argparse
 import sys
-from struct import unpack
-from collections import OrderedDict
 from binascii import b2a_hex
 
 # our tools are in "libexec"
@@ -259,7 +257,7 @@ class KDZFileTools(kdz.KDZFile):
 		self.openFile(args.kdzfile)
 		self.partList = self.getPartitions()
 
-		if "outdir" in args:
+		if args.outdir:
 			self.outdir = args.outdir
 
 		if args.listOnly:
