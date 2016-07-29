@@ -45,7 +45,7 @@ class KDZFileTools(kdz.KDZFile):
 	kdz_header = {
 		b"\x28\x05\x00\x00"b"\x34\x31\x25\x80":	"1",
 		b"\x18\x05\x00\x00"b"\x32\x79\x44\x50":	"1.99",
-		b"\x28\x05\x00\x00"b"\x24\x38\x22\x25":	"2",
+		kdz.KDZFile._dz_header:			"2",
 	}
 
 
@@ -176,6 +176,33 @@ class KDZFileTools(kdz.KDZFile):
 		# Close the file
 		outfile.close()
 
+	def saveParams(self):
+		"""
+		Save the parameters for creating a compatible file
+		"""
+
+		params = open(os.path.join(self.outdir, ".params"), "wb")
+		params.write(u'# saved parameters from the file "{:s}"\n'.format(self.kdzfile))
+		params.write(u"version={:s}\n".format(self.header_type))
+		params.write(u"dataStart={:d}\n".format(self.dataStart))
+		params.write(u"# embedded files\n")
+
+		out = []
+		i = 0
+		for p in self.partitions:
+			out.append({'name': p['name'], 'data': p['offset'], 'header': i})
+			i += 1
+
+		out.sort(key=lambda p: p['data'])
+
+		i = 0
+		for p in out:
+			params.write(u"payload{:d}={:s}\n".format(i, p['name']))
+			params.write(u"payload{:d}head={:d}\n".format(i, p['header']))
+			i += 1
+
+		params.close()
+
 	def parseArgs(self):
 		# Parse arguments
 		parser = argparse.ArgumentParser(description='LG KDZ File Extractor originally by IOMonster')
@@ -219,6 +246,7 @@ class KDZFileTools(kdz.KDZFile):
 		for part in enumerate(self.partList):
 			print("[+] Extracting " + part[1][0].decode("utf8") + " to " + os.path.join(self.outdir,part[1][0].decode("utf8")))
 			self.extractPartition(part[0])
+		self.saveParams()
 
 	def cmdListPartitions(self):
 		print("[+] KDZ Partition List (format v{:s})\n=========================================".format(self.header_type))
@@ -227,6 +255,7 @@ class KDZFileTools(kdz.KDZFile):
 
 	def main(self):
 		args = self.parseArgs()
+		self.kdzfile = args.kdzfile
 		self.openFile(args.kdzfile)
 		self.partList = self.getPartitions()
 
