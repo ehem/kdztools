@@ -100,6 +100,7 @@ class KDZFileTools(kdz.KDZFile):
 		out.seek(current, os.SEEK_SET)
 
 		for name in self.payload:
+			print("[+] Writing {:s} to output file {:s}".format(name, self.kdzfile))
 			inf = open(os.path.join(self.indir, name), "rb")
 			buf = " "
 			while len(buf) > 0:
@@ -110,6 +111,8 @@ class KDZFileTools(kdz.KDZFile):
 			current = out.tell()
 
 		self.files[self.headers[-1]].append(0)
+
+		print("\n[+] Writing headers to {:s}".format(self.kdzfile))
 
 		out.seek(0, os.SEEK_SET)
 		out.write(self._dz_header)
@@ -127,6 +130,7 @@ class KDZFileTools(kdz.KDZFile):
 			buf = self.packdict(head)
 			out.write(buf)
 		out.close()
+		print("[+] Done!")
 
 	def cmdList(self):
 		pass
