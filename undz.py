@@ -711,9 +711,11 @@ class UNDZFile(dz.DZFile, UNDZUtils):
 		Extract the whole file to an image file named name
 		"""
 
-		for slice in self.slices:
-			file.seek(slice.getStart(), io.SEEK_SET)
-			slice.extractSlice(file, name)
+		# the slice extraction has gotten preoccupied with slices
+		for chunk in self.chunks:
+			file.seek(chunk.getTargetStart(), io.SEEK_SET)
+			chunk.extractChunk(file, name)
+
 
 	def saveHeader(self):
 		"""
