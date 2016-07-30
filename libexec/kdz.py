@@ -41,12 +41,9 @@ class KDZFile(dz.DZStruct):
 	# Example:
 	#   ('itemName', ('formatString', collapse))
 	_dz_format_dict = OrderedDict([
-		('name',	('32s',  True)),
-		('pad',		('224s', True)),
-		('length',	('I',    False)),
-		('reserved0',	('I',    True)),	# currently always zero
-		('offset',	('I',    False)),
-		('reserved1',	('I',    True)),	# currently always zero
+		('name',	('256s', True)),
+		('length',	('Q',    False)),
+		('offset',	('Q',    False)),
 	])
 
 

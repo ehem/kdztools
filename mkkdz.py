@@ -124,8 +124,6 @@ class KDZFileTools(kdz.KDZFile):
 				'name':		name.encode("utf8"),
 				'length':	self.files[name][1],
 				'offset': 	self.files[name][0],
-				'reserved0':	0,
-				'reserved1':	0,
 			}
 			buf = self.packdict(head)
 			out.write(buf)

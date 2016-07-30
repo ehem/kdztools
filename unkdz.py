@@ -80,11 +80,6 @@ class KDZFileTools(kdz.KDZFile):
 				print("[!] Error: internal error", file=sys.stderr)
 				sys.exit(-1)
 
-		# To my knowledge this is supposed to be blank (for now...)
-		if len(kdz_item['pad']) != 0:
-			print("[!] Error: pad is not empty", file=sys.stderr)
-			sys.exit(1)
-
 		return kdz_item
 
 	def getPartitions(self):
