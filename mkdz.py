@@ -232,7 +232,7 @@ class MKDZFileTools:
 	def cmdCreateFile(self, file, name):
 		"""
 		"""
-		self.dz_file.writeFile(file, name)
+		self.dz_file.writeFile(file, os.path.basename(name))
 
 	def parseArgs(self):
 		# Parse arguments
