@@ -174,14 +174,14 @@ class KDZFileTools(kdz.KDZFile):
 		Save the parameters for creating a compatible file
 		"""
 
-		params = open(os.path.join(self.outdir, ".params"), "wb")
-		params.write(u'# saved parameters from the file "{:s}"\n'.format(self.kdzfile).encode("utf8"))
-		params.write(u"version={:d}\n".format(self.header_type).encode("utf8"))
-		params.write(b"# note, this is actually quite fluid, dataStart just needs to be large enough\n")
-		params.write(b"# for headers not to overwrite data; roughly 16 bytes for overhead plus 272\n")
-		params.write(b"# bytes per file should be sufficient (but not match original)\n")
-		params.write(u"dataStart={:d}\n".format(self.dataStart).encode("utf8"))
-		params.write(b"# embedded files\n")
+		params = open(os.path.join(self.outdir, ".params"), "wt")
+		params.write('# saved parameters from the file "{:s}"\n'.format(self.kdzfile))
+		params.write("version={:d}\n".format(self.header_type))
+		params.write("# note, this is actually quite fluid, dataStart just needs to be large enough\n")
+		params.write("# for headers not to overwrite data; roughly 16 bytes for overhead plus 272\n")
+		params.write("# bytes per file should be sufficient (but not match original)\n")
+		params.write("dataStart={:d}\n".format(self.dataStart))
+		params.write("# embedded files\n")
 
 		out = []
 		i = 0
@@ -193,8 +193,8 @@ class KDZFileTools(kdz.KDZFile):
 
 		i = 0
 		for p in out:
-			params.write(u"payload{:d}={:s}\n".format(i, p['name'].decode("utf8")).encode("utf8"))
-			params.write(u"payload{:d}head={:d}\n".format(i, p['header']).encode("utf8"))
+			params.write("payload{:d}={:s}\n".format(i, p['name'].decode("utf8")))
+			params.write("payload{:d}head={:d}\n".format(i, p['header']))
 			i += 1
 
 		params.close()

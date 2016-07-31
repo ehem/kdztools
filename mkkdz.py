@@ -44,13 +44,13 @@ class KDZFileTools(kdz.KDZFile):
 		"""
 
 		params = dict()
-		file = open(os.path.join(self.indir, ".params"), "rb")
-		line = file.readline().decode("utf8")
+		file = open(os.path.join(self.indir, ".params"), "rt")
+		line = file.readline()
 		while len(line) > 0:
 			line.lstrip()
 			line = line.partition("#")[0]
 			if len(line) == 0:
-				line = file.readline().decode("utf8")
+				line = file.readline()
 				continue
 			parts = line.partition("=")
 			if len(parts[1]) == 0:
@@ -61,7 +61,7 @@ class KDZFileTools(kdz.KDZFile):
 			except ValueError:
 				val = parts[2].strip()
 			params[var] = val
-			line = file.readline().decode("utf8")
+			line = file.readline()
 
 		file.close()
 
