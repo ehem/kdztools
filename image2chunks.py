@@ -102,7 +102,7 @@ class Image2Chunks(dz.DZChunk):
 		return True
 
 
-	def makeChunks(self, name):
+	def makeChunksHoles(self, name):
 		"""
 		Generate one or more .chunks files for the named file
 		"""
@@ -179,7 +179,149 @@ class Image2Chunks(dz.DZChunk):
 		print("[+] done\n")
 
 
-	def __init__(self, name):
+	def makeChunksProbe(self, name):
+		"""
+		Generate one or more .chunks files for the named file
+		"""
+
+		os.chdir(os.path.dirname(name))
+		name = os.path.basename(name)
+		baseName = name.rpartition(".")[0] + "_"
+		sliceName = name.rpartition(".")[0].encode("utf8")
+
+		current = 0
+		targetAddr = self.startLBA
+		eof = self.file.seek(0, io.SEEK_END)
+		self.file.seek(0, io.SEEK_SET)
+
+
+
+# emulate characteristics of LG's tool, always find a block at start
+		readSize = self.blockSize << 10
+
+		md5 = hashlib.md5()
+		crc = crc32(b"")
+		zobj = zlib.compressobj(1)
+		self.file.seek(current, io.SEEK_SET)
+
+		chunkName = baseName + str(targetAddr) + ".bin"
+		out = io.FileIO(chunkName + ".chunk", "wb")
+
+		sys.stdout.write("[+] Compressing {:s} to {:s} ".format(name, chunkName))
+
+		chunkName = chunkName.encode("utf8")
+		out.seek(self._dz_length, io.SEEK_SET)
+		zlen = 0
+
+		wipeData = readSize
+		dataCount = readSize
+
+
+
+		buf = self.file.read(readSize)
+
+		while len(buf.lstrip(b'\x00')) == 0 and current < eof:
+			md5.update(buf)
+			crc = crc32(buf, crc)
+			zdata = zobj.compress(buf)
+			zlen += len(zdata)
+			out.write(zdata)
+			wipeData += readSize
+			dataCount += readSize
+			current += readSize
+
+			buf = self.file.read(readSize)
+
+
+
+		while current < eof:
+
+
+
+
+			while len(buf.lstrip(b'\x00')) != 0 and current < eof:
+				md5.update(buf)
+				crc = crc32(buf, crc)
+				zdata = zobj.compress(buf)
+				zlen += len(zdata)
+				out.write(zdata)
+				wipeData += readSize
+				dataCount += readSize
+				current += readSize
+
+				buf = self.file.read(readSize)
+
+			zdata = zobj.flush(zlib.Z_FINISH)
+			zlen += len(zdata)
+			out.write(zdata)
+			md5 = md5.digest()
+
+
+
+			while len(buf.lstrip(b'\x00')) == 0 and current < eof:
+				wipeData += readSize
+				current += readSize
+				buf = self.file.read(readSize)
+
+
+			print("({:d} empty blocks)".format((wipeData - dataCount) >> self.blockShift))
+
+
+
+
+
+			out.seek(0, io.SEEK_SET)
+
+			values = {
+				'sliceName':	sliceName,
+				'chunkName':	chunkName,
+				'targetSize':	dataCount,
+				'reserved':	0,
+				'dataSize':	zlen,
+				'md5':		md5,
+				'targetAddr':	targetAddr,
+				'wipeCount':	wipeData >> self.blockShift,
+				'crc32':	crc & 0xFFFFFFFF,
+			}
+
+			header = self.packdict(values)
+			out.write(header)
+			out.close()
+
+
+
+
+			targetAddr = self.startLBA + (current >> self.blockShift)
+
+
+			if current < eof:
+
+
+				md5 = hashlib.md5()
+				crc = crc32(b"")
+				zobj = zlib.compressobj(1)
+
+				chunkName = baseName + str(targetAddr) + ".bin"
+				out = io.FileIO(chunkName + ".chunk", "wb")
+
+				sys.stdout.write("[+] Compressing {:s} to {:s} ".format(name, chunkName))
+
+				chunkName = chunkName.encode("utf8")
+				out.seek(self._dz_length, io.SEEK_SET)
+				zlen = 0
+
+				wipeData = readSize
+				dataCount = readSize
+
+
+
+
+
+
+		print("[+] done\n")
+
+
+	def __init__(self, name, hasHoles):
 		"""
 		Initializer for Image2Chunks class, takes filename as arg
 		"""
@@ -190,7 +332,7 @@ class Image2Chunks(dz.DZChunk):
 
 		if self.loadParams(name):
 
-			self.makeChunks(name)
+			self.makeChunksHoles(name) if hasHoles else self.makeChunksProbe(name)
 
 
 if __name__ == "__main__":
@@ -200,8 +342,32 @@ if __name__ == "__main__":
 
 	basedir = os.open(".", os.O_DIRECTORY)
 
+	# reasonable default, everyone is copying SEEK_DATA/SEEK_HOLE
+	hasHoles = False if os.name == "nt" else True
+
 	for arg in sys.argv:
-		Image2Chunks(arg)
+
+		if arg[0] == "-":
+			if arg == "-s":
+				hasHoles = True
+			elif arg == "-p":
+				hasHoles = False
+			elif arg == "-h":
+				print("usage: {:s} [-h] [-s | -n] <file(s)>\n".format(progname))
+				print("DZ Chunking program by Elliott Mitchell\n")
+				print("optional arguments:")
+				print("  -h                    show this help message and exit")
+				print("  -s                    use SEEK_DATA/SEEK_HOLE (not available on all OSes)")
+				print("  -p                    probe for holes (safe)")
+				sys.exit(0)
+
+			elif arg[0] == "-":
+				print('[!] Unknown option "{:s}"'.format(arg))
+				sys.exit(1)
+
+			continue
+
+		Image2Chunks(arg, hasHoles)
 
 		os.fchdir(basedir)
 
