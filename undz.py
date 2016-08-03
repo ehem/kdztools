@@ -56,13 +56,15 @@ class UNDZUtils(object):
 		# and apply the format to the buffer
 		dz_item = self.unpackdict(buffer)
 
-		dz_item['buffer'] = buffer
-
 
 		# Verify DZ area header
 		if dz_item == None:
 			print("[!] Bad DZ {:s} header!".format(self._dz_area), file=sys.stderr)
 			sys.exit(1)
+
+
+		# some paths want to take a look at the raw data
+		dz_item['buffer'] = buffer
 
 
 		# Collapse (truncate) each key's value if it's listed as collapsible
