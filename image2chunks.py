@@ -20,10 +20,12 @@ Copyright (C) 2016 Elliott Mitchell <ehem+android@m5p.com>
 from __future__ import print_function
 import os
 import sys
+import subprocess
 import io
 import zlib
 import argparse
 import hashlib
+from collections import OrderedDict
 from binascii import crc32
 
 # our tools are in "libexec"
@@ -34,6 +36,276 @@ import dz
 # compatibility, Python 3 has SEEK_HOLE/SEEK_DATA, Python 2 does not
 SEEK_HOLE = io.SEEK_HOLE if hasattr(io, "SEEK_HOLE") else 4
 SEEK_DATA = io.SEEK_DATA if hasattr(io, "SEEK_DATA") else 3
+
+class EXT4SparseChunk(dz.DZStruct):
+	"""
+	Class for handling chunk from Android sparse image format file
+	"""
+
+	# Known length of chunk
+	_dz_length = 12
+
+	# Doesn't include magic number, this should match output, I hope
+	_dz_header = b""
+
+	# Format dictionary
+	_dz_format_dict = OrderedDict([
+		('header',	('0s',	False)),	# magic number (none)
+		('type',	('H',	False)),	# type value
+		('reserved1',	('H',	True)),		# reserved
+		('chunkCount',	('I',	False)),	# blocks in output
+		('totalSize',	('I',	False)),	# bytes of chunk input
+	])
+
+	# Chunk types
+	typeRaw		= 0xCAC1
+	typeFill	= 0xCAC2
+	typeDontCare	= 0xCAC3
+	typeCrc32	= 0xCAC4
+
+	def __init__(self, head, buf, pipe, blockShift, readSize):
+		"""
+		Initializer for EXT4SparseChunk, gets DZStruct to fill values
+		"""
+		super(EXT4SparseChunk, self).__init__(EXT4SparseChunk)
+
+		values = self.unpackdict(buf[:self._dz_length])
+
+		self.type = values['type']
+		self.blocks = values['chunkCount']
+
+		self.remaining = self.blocks << blockShift
+
+		self.readSize = readSize
+
+		self.pipe = pipe
+
+		self.head = head
+
+		if self.type == self.typeRaw:
+			# would such a case suggest zero-padding?
+			if self.remaining != values['totalSize'] - len(buf):
+				print("[!] Error encountered raw chunk with incorrect amount of payload", file=sys.stderr)
+				sys.exit(64)
+		elif self.type == self.typeFill:
+			buf = self.pipe.read(values['totalSize'] - len(buf))
+			self.buffer = b""
+			while len(self.buffer) < readSize:
+				self.buffer += buf
+
+	def __del__(self):
+		"""
+		Destructor for EXT4SparseChunk, notably read remaining data,
+		if any is left behind
+		"""
+
+		if self.type == self.typeRaw or self.type == self.typeFill:
+			while self.remaining > 0:
+				if self.remaining < (1<<self.blockShift):
+					buf = self.pipe.read(self.remaining)
+				else:
+					buf = self.pipe.read(self.readSize)
+				self.remaining -= len(buf)
+				self.head.crc = crc32(buf, self.head.crc)
+
+	def __iter__(self):
+		"""
+		The __iter__ method for doing loops
+		"""
+		return self if self.type == self.typeRaw or self.type == self.typeFill else None
+
+	def __next__(self):
+		"""
+		Retrieve the next parsed chunk
+		"""
+
+		if self.remaining <= 0:
+			raise StopIteration
+
+		if self.type == self.typeRaw:
+			if self.remaining < self.readSize:
+				buf = self.pipe.read(self.remaining)
+			else:
+				buf = self.pipe.read(self.readSize)
+
+		elif self.type == self.typeFill:
+			if self.remaining < self.readSize:
+				buf = self.buffer[:self.readSize]
+			else:
+				buf = self.buffer
+
+		self.remaining -= len(buf)
+
+		self.head.crc = crc32(buf, self.head.crc)
+
+		return buf
+
+	# Python 2 compatibility
+	next = __next__
+
+
+class EXT4SparseFile(dz.DZStruct):
+	"""
+	Class for handling Android sparse image file format
+	"""
+
+	# Known length of headers
+	_dz_length = 28
+
+	# Header magic number
+	_dz_header = b"\x3A\xFF\x26\xED"
+
+	# Format dictionary
+	_dz_format_dict = OrderedDict([
+		('header',	('4s',	False)),	# magic number
+		('major',	('H',	False)),	# Major version
+		('minor',	('H',	False)),	# Minor version
+		('headerSize',	('H',	False)),	# Actual size of header
+		('chunkHSize',	('H',	False)),	# Chunk header size
+		('blockSize',	('I',	False)),	# block size in bytes
+		('totalBlocks',	('I',	False)),	# blocks in image
+		('totalChunks',	('I',	False)),	# number of chunks
+		('imageCRC32',	('I',	False)),	# CRC32 of image
+	])
+
+	def __init__(self, name, readSize):
+		"""
+		Initializer for EXT4SparseHeader, gets DZStruct to fill values
+		"""
+		super(EXT4SparseFile, self).__init__(EXT4SparseFile)
+
+		# Invoke ext2simg (really should be ext4tosimg)
+		try:
+			child = subprocess.Popen(["ext2simg", "-c", name, "-"], stdout=subprocess.PIPE)
+		except OSError:
+			print("[!] Failed executing ext2simg, has it been installed?", file=sys.stderr)
+			print("[ ]", file=sys.stderr)
+			print("[ ] Suggested resource: http://www.xda-developers.com/easily-get-binaries-needed-to-work-with-kernels/", file=sys.stderr)
+			print("[ ]", file=sys.stderr)
+			print("[ ] Debian/Linux variants, install the package android-tools-fsutils", file=sys.stderr)
+			sys.exit(1)
+
+		self.child = child
+
+		self.readSize = readSize
+
+		# grab the header
+		buf = self.child.stdout.read(self._dz_length)
+
+		# parse out the values
+		values = self.unpackdict(buf)
+
+		# valid, the format hasn't changed?
+		if values == None:
+			print("[!] Error: Bad sparse-image header from ext2simg! (newer format, other?)", file=sys.stderr)
+			sys.exit(1)
+
+		# Newer format, fail if not known
+		if values['major'] != 1:
+			print("[!] Error: Output format from ext2simg too recent, unable to parse, failed", file=sys.stderr)
+			sys.exit(1)
+
+		# Newer format, but not incompatible
+		if values['minor'] > 0:
+			print("[!] Warning: Output format from ext2simg more recent than this utility", file=sys.stderr)
+
+		# Extra fields to ignore
+		if values['headerSize'] > self._dz_length:
+			self.child.stdout.read(values['headerSize'] - self._dz_length)
+
+		# How large the chunks are
+		self.chunkHSize = values['chunkHSize']
+		self.chunkCount = values['totalChunks']
+
+		# CRC32 of image
+		self.origCrc = values['imageCRC32']
+		self.crc = crc32(b"")
+
+		# Block size of the device, power of 2, minimum of 4K
+		size = values['blockSize']
+		self.blockSize = size
+
+		if size & (size-1):
+			print("[!] Error: Block size specified in sparse header is not a power of 2", file=sys.stderr)
+			sys.exit(1)
+
+		result = 0
+		shift = 32
+		while shift > 0:
+			if (size>>shift)>0:
+				size>>=shift
+				result+=shift
+			shift>>=1
+		self.blockShift = result
+
+	def __del__(self):
+		"""
+		Destructor for Image2Chunks, notably kills child if needed
+		"""
+
+		if hasattr(self, 'child') and self.child != None:
+			# normal exit
+			if self.chunkCount <= 0:
+				if self.child.poll() != None:
+					if self.child.returncode > 0:
+						print("[!] Warning: Return code of {:d} from ext2simg!".format(self.child.returncode), file=sys.stderr)
+					elif self.child.returncode < 0:
+						print("[!] Warning ext2simg killed by signal {:d}!".format(-self.child.returncode), file=sys.stderr)
+					# otherwise 0 exit, no problem
+
+				# hasn't terminated, trouble...
+				else:
+					self.child.terminate()
+					if self.child.wait(10) == None:
+						self.child.kill()
+					print("[!] Warning forced to terminate ext2simg", file=sys.stderr)
+			# abnormal condition of some sort
+			else:
+				self.child.terminate()
+				if self.child.wait(10) == None:
+					self.child.kill()
+
+	def __iter__(self):
+		"""
+		The __iter__ method for doing loops
+		"""
+		return self
+
+	def __next__(self):
+		"""
+		Retrieve the next parsed chunk
+		"""
+
+		try:
+			# The previous chunk object *MUST* be destroyed *NOW*
+			self.last.__del__()
+		except AttributeError:
+			# doesn't exist yet
+			pass
+
+		if self.chunkCount <= 0:
+			self.crc = self.crc & 0xFFFFFFFF
+			# apparently 0 is used for none computed
+			if self.crc != self.origCrc and self.origCrc != 0:
+				print("[!] CRC mismatch, computed={:08X}, original={:08X}".format(self.crc, self.origCrc))
+				sys.exit(4)
+
+			raise StopIteration
+
+		self.chunkCount -= 1
+
+		buf = self.child.stdout.read(self.chunkHSize)
+
+		if len(buf) != self.chunkHSize:
+			print("[!] Attempting to read chunk header got short read", file=sys.stderr)
+			sys.exit(2)
+
+		self.last = EXT4SparseChunk(self, buf, self.child.stdout, self.blockShift, self.readSize)
+		return self.last
+
+	# Python 2 compatibility
+	next = __next__
+
 
 class Image2Chunks(dz.DZChunk):
 	"""
@@ -175,6 +447,113 @@ class Image2Chunks(dz.DZChunk):
 
 			current = next
 			targetAddr = self.startLBA + (current >> self.blockShift)
+
+		print("[+] done\n")
+
+
+	def makeChunksEXT4FS(self, name):
+		"""
+		Generate one or more .chunks files assuming an EXT4 FS
+		"""
+
+		os.chdir(os.path.dirname(name))
+		name = os.path.basename(name)
+		baseName = name.rpartition(".")[0] + "_"
+		sliceName = name.rpartition(".")[0].encode("utf8")
+
+		# Check length before closing
+		eof = self.file.seek(0, io.SEEK_END)
+
+		# Alas, ext2simg can't take the image as stdin
+		self.file.close()
+
+		sparse = EXT4SparseFile(name, 1<<self.blockShift)
+
+		# sigh, Python 2 hack for some variables
+		class nl:
+			yuck = "truly"
+
+		nl.current = 0
+		nl.targetAddr = self.startLBA
+		nl.wipeCount = 0
+
+		# local function not used by anyone else
+		def complete():
+#			nonlocal zlen, md5, current, targetAddr, wipeCount
+			zdata = zobj.flush(zlib.Z_FINISH)
+			nl.zlen += len(zdata)
+			out.write(zdata)
+			nl.md5 = nl.md5.digest()
+
+			out.seek(0, io.SEEK_SET)
+
+			values = {
+				'sliceName':	sliceName,
+				'chunkName':	chunkName,
+				'targetSize':	dataBlocks << self.blockShift,
+				'reserved':	0,
+				'dataSize':	nl.zlen,
+				'md5':		nl.md5,
+				'targetAddr':	nl.targetAddr,
+				'wipeCount':	nl.wipeCount,
+				'crc32':	crc & 0xFFFFFFFF,
+			}
+
+			nl.header = self.packdict(values)
+			out.write(nl.header)
+			out.close()
+
+			nl.current += nl.wipeCount << self.blockShift
+			nl.targetAddr = self.startLBA + (nl.current >> self.blockShift)
+
+			print("({:d} empty blocks)".format(nl.wipeCount - dataBlocks))
+
+			nl.wipeCount = 0
+
+		for chunk in sparse:
+			if chunk.type == EXT4SparseChunk.typeRaw or chunk.type == EXT4SparseChunk.typeFill:
+				if nl.wipeCount:
+					complete()
+				dataBlocks = chunk.remaining >> self.blockShift
+				nl.wipeCount += dataBlocks
+
+				nl.md5 = hashlib.md5()
+				crc = crc32(b"")
+				zobj = zlib.compressobj(1)
+
+				chunkName = baseName + str(nl.targetAddr) + ".bin"
+				out = io.FileIO(chunkName + ".chunk", "wb")
+
+				sys.stdout.write("[+] Compressing {:s} to {:s} ".format(name, chunkName))
+
+				chunkName = chunkName.encode("utf8")
+				out.seek(self._dz_length, io.SEEK_SET)
+				nl.zlen = 0
+
+				for buf in chunk:
+					nl.md5.update(buf)
+					crc = crc32(buf, crc)
+					zdata = zobj.compress(buf)
+					nl.zlen += len(zdata)
+					out.write(zdata)
+
+			elif chunk.type == EXT4SparseChunk.typeDontCare:
+				# check for EOF, lastWipe overrides
+				if sparse.chunkCount == 0:
+					nl.wipeCount = self.lastWipe - nl.targetAddr
+				else:
+					nl.wipeCount += chunk.remaining>>self.blockShift
+				complete()
+
+			elif chunk.type == EXT4SparseChunk.typeCrc32:
+				pass
+			else:
+				print("[!] Error: unknown chunk, type=0x{:04X}".format(chunk.type), file=sys.stderr)
+				sys.exit(64)
+
+		if nl.wipeCount:
+			nl.wipeCount = self.lastWipe - nl.targetAddr
+			complete()
 
 		print("[+] done\n")
 
@@ -321,7 +700,7 @@ class Image2Chunks(dz.DZChunk):
 		print("[+] done\n")
 
 
-	def __init__(self, name, hasHoles):
+	def __init__(self, name, strategy):
 		"""
 		Initializer for Image2Chunks class, takes filename as arg
 		"""
@@ -331,8 +710,15 @@ class Image2Chunks(dz.DZChunk):
 		self.openFiles(name)
 
 		if self.loadParams(name):
-
-			self.makeChunksHoles(name) if hasHoles else self.makeChunksProbe(name)
+			if strategy == 0:
+				self.makeChunksEXT4FS(name)
+			elif strategy == 1:
+				self.makeChunksHoles(name)
+			elif strategy == 2:
+				self.makeChunksProbe(name)
+			else:
+				print("[!] Internal error!", file=sys.stderr)
+				sys.exit(127)
 
 
 if __name__ == "__main__":
@@ -342,23 +728,26 @@ if __name__ == "__main__":
 
 	basedir = os.open(".", os.O_DIRECTORY)
 
-	# reasonable default, everyone is copying SEEK_DATA/SEEK_HOLE
-	hasHoles = False if os.name == "nt" else True
+	# default of utilizing ext2simg, this appears to give good results
+	strategy = 0
 
 	for arg in sys.argv:
 
 		if arg[0] == "-":
-			if arg == "-s":
-				hasHoles = True
-			elif arg == "-p":
-				hasHoles = False
-			elif arg == "-h":
-				print("usage: {:s} [-h] [-s | -n] <file(s)>\n".format(progname))
+			if arg == "-e" or arg == "--ext4":
+				strategy = 0
+			elif arg == "-s" or arg == "--sparse":
+				strategy = 1
+			elif arg == "-p" or arg == "--probe":
+				strategy = 2
+			elif arg == "-h" or arg == "--help":
+				print("usage: {:s} [-h | --help] [-e | --ext4 | -s | --sparse | -p | --probe] <file(s)>\n".format(progname))
 				print("DZ Chunking program by Elliott Mitchell\n")
 				print("optional arguments:")
-				print("  -h                    show this help message and exit")
-				print("  -s                    use SEEK_DATA/SEEK_HOLE (not available on all OSes)")
-				print("  -p                    probe for holes (safe)")
+				print("  -h | --help           show this help message and exit")
+				print("  -e | --ext4           use Android's sparse EXT4 dump utility (recommended)")
+				print("  -s | --sparse         use SEEK_DATA/SEEK_HOLE (not available on all OSes)")
+				print("  -p | --probe          probe for holes (safe)")
 				sys.exit(0)
 
 			elif arg[0] == "-":
@@ -367,7 +756,7 @@ if __name__ == "__main__":
 
 			continue
 
-		Image2Chunks(arg, hasHoles)
+		Image2Chunks(arg, strategy)
 
 		os.fchdir(basedir)
 
