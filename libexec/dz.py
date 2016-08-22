@@ -19,10 +19,7 @@ Copyright (C) 2013 IOMonster (thecubed on XDA)
 """
 
 from __future__ import print_function
-#import os
 import sys
-#import io
-#import hashlib
 from struct import Struct
 from collections import OrderedDict
 
@@ -124,7 +121,7 @@ class DZChunk(DZStruct):
 		('dataSize',	('I',    False)),	# amount of compressed
 		('md5',		('16s',  False)),	# MD5 of target image
 		('targetAddr',	('I',    False)),	# first block to write
-		('wipeCount',	('I',    False)),	# blocks to wipe before
+		('trimCount',	('I',    False)),	# blocks to TRIM before
 		('reserved',	('I',    True)),	# currently always zero
 		('crc32',	('I',    False)),	# CRC32 of target image
 		('pad',		('372s', True)),	# currently always zero
