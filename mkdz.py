@@ -95,11 +95,11 @@ class MKDZChunk(dz.DZChunk):
 
 		self.start = dz_item['targetAddr']
 
-		if dz_item['targetSize'] >> blockShift > dz_item['wipeCount']:
+		if dz_item['targetSize'] >> blockShift > dz_item['trimCount']:
 			print("[!] target size is more than number of blocks to wipe?!  Inconceivable!", file=sys.stderr)
 			sys.exit(1)
 
-		self.end = self.start + dz_item['wipeCount']
+		self.end = self.start + dz_item['trimCount']
 
 		file.close()
 

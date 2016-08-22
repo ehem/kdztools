@@ -394,10 +394,10 @@ class Image2Chunks(dz.DZChunk):
 			# Python's handling of this condition is suboptimal
 			try:
 				next = self.file.seek(hole, SEEK_DATA) & ~(self.blockSize-1)
-				wipeCount = (next - current) >> self.blockShift
+				trimCount = (next - current) >> self.blockShift
 			except IOError:
 				next = eof
-				wipeCount = self.lastWipe - targetAddr
+				trimCount = self.lastWipe - targetAddr
 
 			md5 = hashlib.md5()
 			crc = crc32(b"")
@@ -437,7 +437,7 @@ class Image2Chunks(dz.DZChunk):
 				'dataSize':	zlen,
 				'md5':		md5,
 				'targetAddr':	targetAddr,
-				'wipeCount':	wipeCount,
+				'trimCount':	trimCount,
 				'crc32':	crc & 0xFFFFFFFF,
 			}
 
@@ -475,11 +475,11 @@ class Image2Chunks(dz.DZChunk):
 
 		nl.current = 0
 		nl.targetAddr = self.startLBA
-		nl.wipeCount = 0
+		nl.trimCount = 0
 
 		# local function not used by anyone else
 		def complete():
-#			nonlocal zlen, md5, current, targetAddr, wipeCount
+#			nonlocal zlen, md5, current, targetAddr, trimCount
 			zdata = zobj.flush(zlib.Z_FINISH)
 			nl.zlen += len(zdata)
 			out.write(zdata)
@@ -495,7 +495,7 @@ class Image2Chunks(dz.DZChunk):
 				'dataSize':	nl.zlen,
 				'md5':		nl.md5,
 				'targetAddr':	nl.targetAddr,
-				'wipeCount':	nl.wipeCount,
+				'trimCount':	nl.trimCount,
 				'crc32':	crc & 0xFFFFFFFF,
 			}
 
@@ -503,19 +503,19 @@ class Image2Chunks(dz.DZChunk):
 			out.write(nl.header)
 			out.close()
 
-			nl.current += nl.wipeCount << self.blockShift
+			nl.current += nl.trimCount << self.blockShift
 			nl.targetAddr = self.startLBA + (nl.current >> self.blockShift)
 
-			print("({:d} empty blocks)".format(nl.wipeCount - dataBlocks))
+			print("({:d} empty blocks)".format(nl.trimCount - dataBlocks))
 
-			nl.wipeCount = 0
+			nl.trimCount = 0
 
 		for chunk in sparse:
 			if chunk.type == EXT4SparseChunk.typeRaw or chunk.type == EXT4SparseChunk.typeFill:
-				if nl.wipeCount:
+				if nl.trimCount:
 					complete()
 				dataBlocks = chunk.remaining >> self.blockShift
-				nl.wipeCount += dataBlocks
+				nl.trimCount += dataBlocks
 
 				nl.md5 = hashlib.md5()
 				crc = crc32(b"")
@@ -540,9 +540,9 @@ class Image2Chunks(dz.DZChunk):
 			elif chunk.type == EXT4SparseChunk.typeDontCare:
 				# check for EOF, lastWipe overrides
 				if sparse.chunkCount == 0:
-					nl.wipeCount = self.lastWipe - nl.targetAddr
+					nl.trimCount = self.lastWipe - nl.targetAddr
 				else:
-					nl.wipeCount += chunk.remaining>>self.blockShift
+					nl.trimCount += chunk.remaining>>self.blockShift
 				complete()
 
 			elif chunk.type == EXT4SparseChunk.typeCrc32:
@@ -551,8 +551,8 @@ class Image2Chunks(dz.DZChunk):
 				print("[!] Error: unknown chunk, type=0x{:04X}".format(chunk.type), file=sys.stderr)
 				sys.exit(64)
 
-		if nl.wipeCount:
-			nl.wipeCount = self.lastWipe - nl.targetAddr
+		if nl.trimCount:
+			nl.trimCount = self.lastWipe - nl.targetAddr
 			complete()
 
 		print("[+] done\n")
@@ -659,7 +659,7 @@ class Image2Chunks(dz.DZChunk):
 				'dataSize':	zlen,
 				'md5':		md5,
 				'targetAddr':	targetAddr,
-				'wipeCount':	wipeData >> self.blockShift,
+				'trimCount':	wipeData >> self.blockShift,
 				'crc32':	crc & 0xFFFFFFFF,
 			}
 

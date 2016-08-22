@@ -227,12 +227,12 @@ class UNDZChunk(dz.DZChunk, UNDZUtils):
 			current = file.seek(0, io.SEEK_CUR)
 
 #			# Ensure space is allocated to areas to be written
-#			for addr in range(self.wipeCount):
+#			for addr in range(self.trimCount):
 #				file.seek(1<<self.dz.shiftLBA, io.SEEK_CUR)
 #				file.write(b'\x00')
 #			file.seek(current, io.SEEK_SET)
 			# Makes the output the correct size, by filling as hole
-			file.truncate(current + (self.wipeCount<<self.dz.shiftLBA))
+			file.truncate(current + (self.trimCount<<self.dz.shiftLBA))
 
 		# Write it to file
 		file.write(self.extract())
@@ -298,7 +298,7 @@ class UNDZChunk(dz.DZChunk, UNDZUtils):
 		self.targetSize	= dz_item['targetSize']
 		self.dataSize	= dz_item['dataSize']
 		self.md5	= dz_item['md5']
-		self.wipeCount	= dz_item['wipeCount']
+		self.trimCount	= dz_item['trimCount']
 		self.crc32	= dz_item['crc32']
 
 		# This is where in the image we're supposed to go
@@ -420,7 +420,7 @@ class UNDZSlice(object):
 
 		if len(self.chunks) > 0:
 			last = self.chunks[-1]
-			params.write(u"lastWipe={:d}\n".format((last.getTargetStart() >> self.dz.shiftLBA) + last.wipeCount))
+			params.write(u"lastWipe={:d}\n".format((last.getTargetStart() >> self.dz.shiftLBA) + last.trimCount))
 			params.write(u"# the block size is important (though not too likely to change in near future\n")
 			params.write(u"blockSize={:d}\n".format(1<<self.dz.shiftLBA))
 			params.write(u"blockShift={:d}\n".format(self.dz.shiftLBA))

@@ -415,7 +415,7 @@ using the EXT4's backwards compatibility mode, rather than the native
 implementation of EXT2/3.  Most other flavors of Unix should get sane output,
 but not as likely to be identical.
 
-There is a value in the chunk headers referred to as "wipeCount" in the code,
+There is a value in the chunk headers referred to as "trimCount" in the code,
 as well as in the .params files (these are simply text files) generated for
 extracted slices.  My suspicion is this is this is a count of blocks to be
 TRIMed prior to writing the data from the DZ file.  There are some oddities
