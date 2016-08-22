@@ -223,7 +223,7 @@ $ undz -f kdzextracted/H90120e_00.dz -x
 [+] Extracting system_9551872.bin to system_9551872.bin.chunk
 [+] Extracting system_9554936.bin to system_9554936.bin.chunk
 [+] Extracting BackupGPT_122141696.bin to BackupGPT_122141696.bin.chunk
-$ del dzextracted/system_*
+$ rm dzextracted/system_[0-9]*[0-9].bin.chunk
 $ undz -f kdzextracted/H90120e_00.dz -s 53
 [!] Warning: Chunk is part of "BackupGPT", but starts in front of slice?!
 [+] Extracting single slice^Wpartition!
@@ -277,67 +277,64 @@ exist for modifying EXT4 filesystems and these should work fine.
 
 The next step would be reconstructing the file.  There are three steps, turning
 the files into chunks, merging them together into a DZ file, and then merging
-everything back into a KDZ file.  As of this writing, "image2chunks.py" relies
-on the Operating System and filesystem having support for SEEK_DATA/SEEK_HOLE.
-Holes are used on Unix to indicate portions of files which do not have any data
-blocks allocated to them.  It may be possible to simulate this on Windows, but
-this has not yet been implemented.
+everything back into a KDZ file.  The first step has some quirks.
 
-If system.image is placed on a filesystem which lacks support for
-SEEK_DATA/SEEK_HOLE, the whole diskslice/partition will end up being
-represented by a single huge chunk.  This should in fact work, but is rather
-suboptimal.  I suspect keeping system.image on an EXT4 filesystem will be
-ideal, since I suspect this is exactly what LG is doing.
+"image2chunks.py" currently has 3 strategies for breaking image files into
+chunks.  At of this writing the prefered strategy is to make use of ext2simg
+from the Android image utilities.  This produces results that differ somewhat
+from LG's images, but is believed to produce sane results.  The differences
+have me wondering whether LG's images are either unsafe, or else relying on
+special knowledge of the hardware (is the eMMC certain to give back zero blocks
+for TRIMmed areas?).
 
-For people using an OS with no hole support (Windows), replacing the line
-defining SEEK_HOLE at the top of image2chunks.py with "SEEK_HOLE = io.SEEK_END"
-should yield viable results.
+The next two strategies are utilizing support for SEEK_DATA and SEEK_HOLE, or
+probing for the presence of holes.  Operating System support for
+SEEK_DATA/SEEK_HOLE is decent, though to my knowledge no versions of Windows
+include this.  This seems a bit of a cheat since it is relying on knowledge of
+which areas of the image haven't been written to.  Probing marks an awful lot
+of areas as holes, which leaves me uncomfortable believing the results to be
+sane.  As such I reccommend the first if available (ext2simg is known to work
+for Linux, but I'm unsure Windows binaries are available).
 
-$ image2chunks dzextracted/system.image
-[+] Compressing system.image to system_901120.bin (1160 empty blocks)
-[+] Compressing system.image to system_1165448.bin (3912 empty blocks)
-[+] Compressing system.image to system_1429456.bin (1208 empty blocks)
-[+] Compressing system.image to system_1689736.bin (3024 empty blocks)
-[+] Compressing system.image to system_1693784.bin (3960 empty blocks)
-[+] Compressing system.image to system_1953744.bin (1208 empty blocks)
-[+] Compressing system.image to system_2214024.bin (3024 empty blocks)
-[+] Compressing system.image to system_2218072.bin (3960 empty blocks)
-[+] Compressing system.image to system_2478032.bin (1208 empty blocks)
-[+] Compressing system.image to system_2738312.bin (3024 empty blocks)
-[+] Compressing system.image to system_2742360.bin (3960 empty blocks)
-[+] Compressing system.image to system_3002320.bin (1208 empty blocks)
-[+] Compressing system.image to system_3262600.bin (3024 empty blocks)
-[+] Compressing system.image to system_3266648.bin (3960 empty blocks)
-[+] Compressing system.image to system_3526608.bin (3072 empty blocks)
-[+] Compressing system.image to system_3788752.bin (3072 empty blocks)
-[+] Compressing system.image to system_4050896.bin (3072 empty blocks)
-[+] Compressing system.image to system_4313040.bin (3072 empty blocks)
-[+] Compressing system.image to system_4575184.bin (3072 empty blocks)
-[+] Compressing system.image to system_4837328.bin (3072 empty blocks)
-[+] Compressing system.image to system_5099472.bin (3072 empty blocks)
-[+] Compressing system.image to system_5361616.bin (3072 empty blocks)
-[+] Compressing system.image to system_5623760.bin (3072 empty blocks)
-[+] Compressing system.image to system_5885904.bin (3072 empty blocks)
-[+] Compressing system.image to system_6148048.bin (3072 empty blocks)
-[+] Compressing system.image to system_6410192.bin (3072 empty blocks)
-[+] Compressing system.image to system_6672336.bin (3072 empty blocks)
-[+] Compressing system.image to system_6934480.bin (3072 empty blocks)
-[+] Compressing system.image to system_7196624.bin (1208 empty blocks)
-[+] Compressing system.image to system_7456904.bin (3024 empty blocks)
-[+] Compressing system.image to system_7460952.bin (3960 empty blocks)
-[+] Compressing system.image to system_7720912.bin (1208 empty blocks)
-[+] Compressing system.image to system_7981192.bin (3024 empty blocks)
-[+] Compressing system.image to system_7985240.bin (3960 empty blocks)
-[+] Compressing system.image to system_8245200.bin (132144 empty blocks)
-[+] Compressing system.image to system_8503296.bin (261120 empty blocks)
-[+] Compressing system.image to system_8765440.bin (261120 empty blocks)
-[+] Compressing system.image to system_9027584.bin (261120 empty blocks)
-[+] Compressing system.image to system_9289728.bin (261120 empty blocks)
-[+] Compressing system.image to system_9551872.bin (2040 empty blocks)
-[+] Compressing system.image to system_9554936.bin (8 empty blocks)
+$ image2chunks --ext4 dzextracted/system.image
+[+] Compressing system.image to system_901120.bin (0 empty blocks)
+[+] Compressing system.image to system_1163264.bin (8 empty blocks)
+[+] Compressing system.image to system_1425408.bin (8 empty blocks)
+[+] Compressing system.image to system_1687552.bin (8 empty blocks)
+[+] Compressing system.image to system_1949696.bin (8 empty blocks)
+[+] Compressing system.image to system_2211840.bin (8 empty blocks)
+[+] Compressing system.image to system_2473984.bin (8 empty blocks)
+[+] Compressing system.image to system_2736128.bin (8 empty blocks)
+[+] Compressing system.image to system_2998272.bin (8 empty blocks)
+[+] Compressing system.image to system_3260416.bin (8 empty blocks)
+[+] Compressing system.image to system_3522560.bin (8 empty blocks)
+[+] Compressing system.image to system_3784704.bin (8 empty blocks)
+[+] Compressing system.image to system_4046848.bin (8 empty blocks)
+[+] Compressing system.image to system_4308992.bin (8 empty blocks)
+[+] Compressing system.image to system_4571136.bin (8 empty blocks)
+[+] Compressing system.image to system_4833280.bin (8 empty blocks)
+[+] Compressing system.image to system_5095424.bin (8 empty blocks)
+[+] Compressing system.image to system_5357568.bin (8 empty blocks)
+[+] Compressing system.image to system_5619712.bin (8 empty blocks)
+[+] Compressing system.image to system_5881856.bin (8 empty blocks)
+[+] Compressing system.image to system_6144000.bin (8 empty blocks)
+[+] Compressing system.image to system_6406144.bin (8 empty blocks)
+[+] Compressing system.image to system_6668288.bin (8 empty blocks)
+[+] Compressing system.image to system_6930432.bin (8 empty blocks)
+[+] Compressing system.image to system_7192576.bin (8 empty blocks)
+[+] Compressing system.image to system_7454720.bin (8 empty blocks)
+[+] Compressing system.image to system_7716864.bin (8 empty blocks)
+[+] Compressing system.image to system_7979008.bin (8 empty blocks)
+[+] Compressing system.image to system_8241152.bin (132312 empty blocks)
+[+] Compressing system.image to system_8503296.bin (258096 empty blocks)
+[+] Compressing system.image to system_8765440.bin (258096 empty blocks)
+[+] Compressing system.image to system_9027584.bin (258096 empty blocks)
+[+] Compressing system.image to system_9289728.bin (258096 empty blocks)
+[+] Compressing system.image to system_9551872.bin (8 empty blocks)
 [+] done
+
 $ mkdz -f kdzextracted/H90120e_00.dz -m
-[+] Writing 67 chunks to H90120e_00.dz:
+[+] Writing 60 chunks to H90120e_00.dz:
 
 [+] Writing PrimaryGPT_0.bin.chunk to H90120e_00.dz (5710 bytes)
 [+] Writing modem_16384.bin.chunk to H90120e_00.dz (42883525 bytes)
@@ -364,47 +361,40 @@ $ mkdz -f kdzextracted/H90120e_00.dz -m
 [+] Writing raw_resources_737280.bin.chunk to H90120e_00.dz (888811 bytes)
 [+] Writing raw_resourcesbak_745472.bin.chunk to H90120e_00.dz (888811 bytes)
 [+] Writing factory_753664.bin.chunk to H90120e_00.dz (2829 bytes)
-[+] Writing system_901120.bin.chunk to H90120e_00.dz (26668465 bytes)
-[+] Writing system_1165448.bin.chunk to H90120e_00.dz (58109665 bytes)
-[+] Writing system_1429456.bin.chunk to H90120e_00.dz (54710264 bytes)
-[+] Writing system_1689736.bin.chunk to H90120e_00.dz (2825 bytes)
-[+] Writing system_1693784.bin.chunk to H90120e_00.dz (52096293 bytes)
-[+] Writing system_1953744.bin.chunk to H90120e_00.dz (70618215 bytes)
-[+] Writing system_2214024.bin.chunk to H90120e_00.dz (2825 bytes)
-[+] Writing system_2218072.bin.chunk to H90120e_00.dz (78578387 bytes)
-[+] Writing system_2478032.bin.chunk to H90120e_00.dz (48937596 bytes)
-[+] Writing system_2738312.bin.chunk to H90120e_00.dz (2825 bytes)
-[+] Writing system_2742360.bin.chunk to H90120e_00.dz (70025273 bytes)
-[+] Writing system_3002320.bin.chunk to H90120e_00.dz (66565165 bytes)
-[+] Writing system_3262600.bin.chunk to H90120e_00.dz (2825 bytes)
-[+] Writing system_3266648.bin.chunk to H90120e_00.dz (60403048 bytes)
-[+] Writing system_3526608.bin.chunk to H90120e_00.dz (62078888 bytes)
-[+] Writing system_3788752.bin.chunk to H90120e_00.dz (73287903 bytes)
-[+] Writing system_4050896.bin.chunk to H90120e_00.dz (69725114 bytes)
-[+] Writing system_4313040.bin.chunk to H90120e_00.dz (56307286 bytes)
-[+] Writing system_4575184.bin.chunk to H90120e_00.dz (55839559 bytes)
-[+] Writing system_4837328.bin.chunk to H90120e_00.dz (61357787 bytes)
-[+] Writing system_5099472.bin.chunk to H90120e_00.dz (59119777 bytes)
-[+] Writing system_5361616.bin.chunk to H90120e_00.dz (91752821 bytes)
-[+] Writing system_5623760.bin.chunk to H90120e_00.dz (62343569 bytes)
-[+] Writing system_5885904.bin.chunk to H90120e_00.dz (76766038 bytes)
-[+] Writing system_6148048.bin.chunk to H90120e_00.dz (72957799 bytes)
-[+] Writing system_6410192.bin.chunk to H90120e_00.dz (59919374 bytes)
-[+] Writing system_6672336.bin.chunk to H90120e_00.dz (61370736 bytes)
-[+] Writing system_6934480.bin.chunk to H90120e_00.dz (59869939 bytes)
-[+] Writing system_7196624.bin.chunk to H90120e_00.dz (58921824 bytes)
-[+] Writing system_7456904.bin.chunk to H90120e_00.dz (2825 bytes)
-[+] Writing system_7460952.bin.chunk to H90120e_00.dz (66005114 bytes)
-[+] Writing system_7720912.bin.chunk to H90120e_00.dz (61648864 bytes)
-[+] Writing system_7981192.bin.chunk to H90120e_00.dz (2825 bytes)
-[+] Writing system_7985240.bin.chunk to H90120e_00.dz (65415229 bytes)
-[+] Writing system_8245200.bin.chunk to H90120e_00.dz (30703935 bytes)
-[+] Writing system_8503296.bin.chunk to H90120e_00.dz (2826 bytes)
-[+] Writing system_8765440.bin.chunk to H90120e_00.dz (2826 bytes)
-[+] Writing system_9027584.bin.chunk to H90120e_00.dz (2826 bytes)
-[+] Writing system_9289728.bin.chunk to H90120e_00.dz (2826 bytes)
-[+] Writing system_9551872.bin.chunk to H90120e_00.dz (2829 bytes)
-[+] Writing system_9554936.bin.chunk to H90120e_00.dz (34407581 bytes)
+[+] Writing system_901120.bin.chunk to H90120e_00.dz (26665075 bytes)
+[+] Writing system_1163264.bin.chunk to H90120e_00.dz (58115452 bytes)
+[+] Writing system_1425408.bin.chunk to H90120e_00.dz (54704375 bytes)
+[+] Writing system_1687552.bin.chunk to H90120e_00.dz (52101156 bytes)
+[+] Writing system_1949696.bin.chunk to H90120e_00.dz (70629440 bytes)
+[+] Writing system_2211840.bin.chunk to H90120e_00.dz (78588381 bytes)
+[+] Writing system_2473984.bin.chunk to H90120e_00.dz (48942302 bytes)
+[+] Writing system_2736128.bin.chunk to H90120e_00.dz (70046985 bytes)
+[+] Writing system_2998272.bin.chunk to H90120e_00.dz (66573462 bytes)
+[+] Writing system_3260416.bin.chunk to H90120e_00.dz (60415920 bytes)
+[+] Writing system_3522560.bin.chunk to H90120e_00.dz (62080251 bytes)
+[+] Writing system_3784704.bin.chunk to H90120e_00.dz (73292434 bytes)
+[+] Writing system_4046848.bin.chunk to H90120e_00.dz (69740045 bytes)
+[+] Writing system_4308992.bin.chunk to H90120e_00.dz (56316206 bytes)
+[+] Writing system_4571136.bin.chunk to H90120e_00.dz (55851208 bytes)
+[+] Writing system_4833280.bin.chunk to H90120e_00.dz (61368784 bytes)
+[+] Writing system_5095424.bin.chunk to H90120e_00.dz (59140184 bytes)
+[+] Writing system_5357568.bin.chunk to H90120e_00.dz (91760790 bytes)
+[+] Writing system_5619712.bin.chunk to H90120e_00.dz (62347819 bytes)
+[+] Writing system_5881856.bin.chunk to H90120e_00.dz (76785134 bytes)
+[+] Writing system_6144000.bin.chunk to H90120e_00.dz (72970032 bytes)
+[+] Writing system_6406144.bin.chunk to H90120e_00.dz (59925585 bytes)
+[+] Writing system_6668288.bin.chunk to H90120e_00.dz (61374764 bytes)
+[+] Writing system_6930432.bin.chunk to H90120e_00.dz (59874700 bytes)
+[+] Writing system_7192576.bin.chunk to H90120e_00.dz (58924350 bytes)
+[+] Writing system_7454720.bin.chunk to H90120e_00.dz (66024525 bytes)
+[+] Writing system_7716864.bin.chunk to H90120e_00.dz (61645767 bytes)
+[+] Writing system_7979008.bin.chunk to H90120e_00.dz (65437165 bytes)
+[+] Writing system_8241152.bin.chunk to H90120e_00.dz (30711429 bytes)
+[+] Writing system_8503296.bin.chunk to H90120e_00.dz (9577 bytes)
+[+] Writing system_8765440.bin.chunk to H90120e_00.dz (9577 bytes)
+[+] Writing system_9027584.bin.chunk to H90120e_00.dz (9577 bytes)
+[+] Writing system_9289728.bin.chunk to H90120e_00.dz (9577 bytes)
+[+] Writing system_9551872.bin.chunk to H90120e_00.dz (34419508 bytes)
 [+] Writing BackupGPT_122141696.bin.chunk to H90120e_00.dz (5693 bytes)
 $ mkkdz -f myH901_20e.kdz -m
 [+] Writing LGUP_c.dll to output file myH901_20e.kdz
@@ -415,14 +405,15 @@ $ mkkdz -f myH901_20e.kdz -m
 [+] Done!
 $ 
 
-At this point if myH901_20e.kdz is compared to the original
-H90120e_00_0316.kdz, they should be identical.  As stated above, image2chunks
-relies on a FS feature that may not be present on all OSes nor all FSes on
-those OSes.  Exactly identical files have only been shown on Linux with
-system.image being unpacked onto a EXT4 FS (dzextracted being on EXT4).  EXT2/3
-may also work if mounted using the EXT4's backwards compatibility mode, rather
-than the native implementation of EXT2/3.  Most other flavors of Unix should
-get sane output, but not as likely to be identical.
+At this point myH901_20e.kdz should be installable using LG's tools.  If the
+image was unmodified, and image2chunks.py was used with its --sparse option,
+it should be identical to the original file.  This second statement relies on
+behavior of the OS and may not work precisely on all systems.  Exactly
+identical files have only been shown on Linux with system.image being unpacked
+onto a EXT4 FS (dzextracted being on EXT4).  EXT2/3 may also work if mounted
+using the EXT4's backwards compatibility mode, rather than the native
+implementation of EXT2/3.  Most other flavors of Unix should get sane output,
+but not as likely to be identical.
 
 There is a value in the chunk headers referred to as "wipeCount" in the code,
 as well as in the .params files (these are simply text files) generated for
