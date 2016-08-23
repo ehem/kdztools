@@ -400,6 +400,13 @@ class Image2Chunks(dz.DZChunk):
 				next = eof
 				trimCount = self.lastWipe - targetAddr
 
+			# Watch out for chunks >4GB (too big!)
+			# Also, try not to test the limits of LG's tools...
+			if (hole - current) >= 1<<31:
+				hole = (1<<31) - (1<<12) + current
+				next = hole
+				trimCount = (next - current) >> self.blockShift
+
 			md5 = hashlib.md5()
 			crc = crc32(b"")
 			zobj = zlib.compressobj(1)
