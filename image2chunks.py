@@ -181,8 +181,9 @@ class EXT4SparseFile(dz.DZStruct):
 			print("[!] Failed executing ext2simg, has it been installed?", file=sys.stderr)
 			print("[ ]", file=sys.stderr)
 			print("[ ] Suggested resource: http://www.xda-developers.com/easily-get-binaries-needed-to-work-with-kernels/", file=sys.stderr)
-			print("[ ]", file=sys.stderr)
-			print("[ ] Debian/Linux variants, install the package android-tools-fsutils", file=sys.stderr)
+			if os.name != "nt":
+				print("[ ]", file=sys.stderr)
+				print("[ ] Debian/Linux variants, install the package android-tools-fsutils", file=sys.stderr)
 			sys.exit(1)
 
 		self.child = child
