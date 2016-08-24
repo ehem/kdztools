@@ -732,6 +732,17 @@ class Image2Chunks(dz.DZChunk):
 				sys.exit(127)
 
 
+def help(progname):
+	print("usage: {:s} [-h | --help] [-e | --ext4 | -s | --sparse | -p | --probe] <file(s)>\n".format(progname))
+	print("DZ Chunking program by Elliott Mitchell\n")
+	print("optional arguments:")
+	print("  -h | --help           show this help message and exit")
+	print("  -e | --ext4           use Android's sparse EXT4 dump utility (recommended)")
+	print("  -s | --sparse         use SEEK_DATA/SEEK_HOLE (not available on all OSes)")
+	print("  -p | --probe          probe for holes (safe)")
+	sys.exit(0)
+
+
 if __name__ == "__main__":
 
 	progname = sys.argv[0]
@@ -741,6 +752,9 @@ if __name__ == "__main__":
 
 	# no default strategy, ext2simg is reasonable, but worrisome if non-FS
 	strategy = None
+
+	if len(sys.argv) <= 0:
+		help(progname)
 
 	for arg in sys.argv:
 
@@ -752,14 +766,7 @@ if __name__ == "__main__":
 			elif arg == "-p" or arg == "--probe":
 				strategy = 2
 			elif arg == "-h" or arg == "--help":
-				print("usage: {:s} [-h | --help] [-e | --ext4 | -s | --sparse | -p | --probe] <file(s)>\n".format(progname))
-				print("DZ Chunking program by Elliott Mitchell\n")
-				print("optional arguments:")
-				print("  -h | --help           show this help message and exit")
-				print("  -e | --ext4           use Android's sparse EXT4 dump utility (recommended)")
-				print("  -s | --sparse         use SEEK_DATA/SEEK_HOLE (not available on all OSes)")
-				print("  -p | --probe          probe for holes (safe)")
-				sys.exit(0)
+				help(progname)
 
 			elif arg[0] == "-":
 				print('[!] Unknown option "{:s}"'.format(arg))
