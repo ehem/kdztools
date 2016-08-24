@@ -724,6 +724,9 @@ class Image2Chunks(dz.DZChunk):
 				self.makeChunksHoles(name)
 			elif strategy == 2:
 				self.makeChunksProbe(name)
+			elif strategy == None:
+				print("[!] No strategy specified, one *must* be specified before filename(s)", file=sys.stderr)
+				sys.exit(1)
 			else:
 				print("[!] Internal error!", file=sys.stderr)
 				sys.exit(127)
@@ -736,8 +739,8 @@ if __name__ == "__main__":
 
 	basedir = os.open(".", os.O_DIRECTORY)
 
-	# default of utilizing ext2simg, this appears to give good results
-	strategy = 0
+	# no default strategy, ext2simg is reasonable, but worrisome if non-FS
+	strategy = None
 
 	for arg in sys.argv:
 
