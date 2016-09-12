@@ -25,6 +25,7 @@ import io
 import zlib
 import argparse
 import hashlib
+import re
 from binascii import crc32, b2a_hex
 
 # our tools are in "libexec"
@@ -76,7 +77,7 @@ class UNDZUtils(object):
 					sys.exit(1)
 			elif type(dz_item[key]) is int:
 				if dz_item[key] != 0:
-					print('[!] Error: field "'+key+'" is non-zero ('+b2a_hex(dz_item[key])+')', file=sys.stderr)
+					print('[!] Error: Value supposed to be zero in field "'+key+'" is non-zero ('+hex(dz_item[key])+')', file=sys.stderr)
 					sys.exit(1)
 			else:
 				print("[!] Error: internal error", file=sys.stderr)
@@ -302,10 +303,11 @@ class UNDZChunk(dz.DZChunk, UNDZUtils):
 		self.crc32	= dz_item['crc32']
 
 		# This is where in the image we're supposed to go
-		targetAddr = int(self.chunkName[len(self.sliceName)+1:-4])
-
-		if targetAddr != self.targetAddr:
-			self.messages.append("[!] Uncompressed starting offset differs from chunk name!")
+		sliceNumeric = re.search('_(\d+)$',self.sliceName)
+		if sliceNumeric is not None:
+			targetAddr = int(sliceNumeric.group(1))
+			if targetAddr != self.targetAddr:
+				self.messages.append("[!] Uncompressed starting offset differs from chunk name!")
 
 
 
