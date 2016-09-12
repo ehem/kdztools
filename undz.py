@@ -25,6 +25,7 @@ import io
 import zlib
 import argparse
 import hashlib
+import re
 from binascii import crc32, b2a_hex
 
 # our tools are in "libexec"
@@ -302,10 +303,11 @@ class UNDZChunk(dz.DZChunk, UNDZUtils):
 		self.crc32	= dz_item['crc32']
 
 		# This is where in the image we're supposed to go
-		targetAddr = int(self.chunkName[len(self.sliceName)+1:-4])
-
-		if targetAddr != self.targetAddr:
-			self.messages.append("[!] Uncompressed starting offset differs from chunk name!")
+		sliceNumeric = re.search('_(\d+)$',self.sliceName)
+		if sliceNumeric is not None:
+			targetAddr = int(sliceNumeric.group(1))
+			if targetAddr != self.targetAddr:
+				self.messages.append("[!] Uncompressed starting offset differs from chunk name!")
 
 
 
