@@ -110,7 +110,8 @@ class DZChunk(DZStruct):
 	# Format string dict
 	#   itemName is the new dict key for the data to be stored under
 	#   formatString is the Python formatstring for struct.unpack()
-	#   collapse is boolean that controls whether extra \x00 's should be stripped
+	#   collapse: boolean that controls whether extra \x00 's should be stripped
+	#             for integer types collapse set to True means that the value should always be zero
 	# Example:
 	#   ('itemName', ('formatString', collapse))
 	_dz_format_dict = OrderedDict([
@@ -146,7 +147,8 @@ class DZFile(DZStruct):
 	# Format string dict
 	#   itemName is the new dict key for the data to be stored under
 	#   formatString is the Python formatstring for struct.unpack()
-	#   collapse is boolean that controls whether extra \x00 's should be stripped
+	#   collapse: boolean that controls whether extra \x00 's should be stripped
+	#             for integer types collapse set to True means that the value should always be zero
 	# Example:
 	#   ('itemName', ('formatString', collapse))
 	_dz_format_dict = OrderedDict([
