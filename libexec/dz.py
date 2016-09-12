@@ -123,7 +123,7 @@ class DZChunk(DZStruct):
 		('md5',		('16s',  False)),	# MD5 of target image
 		('targetAddr',	('I',    False)),	# first block to write
 		('trimCount',	('I',    False)),	# blocks to TRIM before
-		('reserved',	('I',    True)),	# currently always zero
+		('reserved',	('I',    False)),	# \x0 or \x1 in H850 FW
 		('crc32',	('I',    False)),	# CRC32 of target image
 		('pad',		('372s', True)),	# currently always zero
 	])
@@ -166,10 +166,11 @@ class DZFile(DZStruct):
 		('unknown2',	('48s',  False)),	# Id? windows thing?
 		('build_type',	('20s',  True)),	# "user"???
 		('unknown3',	('8s',   False)),	# version code?
-		('reserved2',	('I',    True)),	# currently always zero
+		('reserved2',	('I',    False)),	# \x0 or \x31 on H850 FW
 		('reserved3',	('H',    True)),	# padding?
 		('oldDateCode',	('10s',	 True)),	# prior firmware date?
-		('pad',		('180s', True)),	# currently always zero
+		('unknown4',	('6s',   False)),	# all zeroes or \x00\x00\x00\x00\x00\x01 in H850 FW
+		('pad',		('174s', True)),	# currently always zero
 	])
 
 	def __init__(self):
