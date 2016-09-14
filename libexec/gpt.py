@@ -70,9 +70,8 @@ class GPTSlice(object):
 			verbose("There is an empty slice entry.")
 			return None
 
-		verbose("Some information about slice here...")
 		verbose("Name: \"{:s}\" start={:d} end={:d}".format(self.name, self.startLBA, self.endLBA))
-		verbose("t={:s} id={:s}".format(str(self.type), str(self.uuid)))
+		verbose("typ={:s} id={:s}".format(str(self.type), str(self.uuid)))
 
 	def __init__(self, buf):
 		"""
@@ -134,7 +133,6 @@ class GPT(object):
 		Display the data in the particular GPT
 		"""
 
-		verbose("Some information about table here...")
 		verbose("")
 
 		verbose("device UUID={:s}".format(str(self.uuid)))
