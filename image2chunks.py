@@ -402,8 +402,8 @@ class Image2Chunks(dz.DZChunk):
 
 			# Watch out for chunks >4GB (too big!)
 			# Also, try not to test the limits of LG's tools...
-			if (hole - current) >= 1<<31:
-				hole = (1<<31) - (1<<12) + current
+			if (hole - current) >= 1<<27:
+				hole = current + (1<<27)
 				next = hole
 				trimCount = (next - current) >> self.blockShift
 
