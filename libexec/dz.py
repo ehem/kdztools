@@ -160,14 +160,17 @@ class DZFile(DZStruct):
 		('version',	('144s', True)),	# "factoryversion"
 		('chunkCount',	('I',    False)),
 		('md5',		('16s',  False)),	# MD5 of chunk headers
-		('unknown0',	('I',    False)),
+		('unknown0',	('I',    False)),	# 256?
 		('reserved1',	('I',    True)),	# currently always zero
-		('unknown1',	('20s',  False)),	#unknown, need to know!
-		('unknown2',	('48s',  False)),	# Id? windows thing?
+		('reserved4',	('H',    True)),	# currently always zero
+		('unknown1',	('16s',  False)),	# unknown, MD5 of thing?
+		('unknown2',	('50s',  True)),	# A##-M##-C##-U##-0 ?
 		('build_type',	('20s',  True)),	# "user"???
-		('unknown3',	('8s',   False)),	# version code?
+		('unknown3',	('4s',   False)),	# version code?  CRC?
+		('androidVer',	('4s',   True)),	# Android ver, optional
 		('reserved2',	('I',    True)),	# currently always zero
 		('reserved3',	('H',    True)),	# padding?
+#anti-rollback minimum date? absent from Lollipop, "122142720" on all other V10
 		('oldDateCode',	('10s',	 True)),	# prior firmware date?
 		('pad',		('180s', True)),	# currently always zero
 	])
