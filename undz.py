@@ -503,6 +503,11 @@ class UNDZFile(dz.DZFile, UNDZUtils):
 		self.unknown2 = dz_file['unknown2']
 		self.unknown3 = dz_file['unknown3']
 
+		# save for reportting and possibly reconstruction later
+		self.old_date_code = dz_file['oldDateCode']
+		self.device = dz_file['device']
+		self.android_version = dz_file['androidVer']
+
 
 	def loadChunks(self):
 		"""
@@ -721,13 +726,39 @@ class UNDZFile(dz.DZFile, UNDZUtils):
 			chunk.extractChunk(file, name)
 
 
-	def saveHeader(self):
+	def saveHeader(self, name):
 		"""
 		Dump the header from the original file into the output dir
 		"""
 		file = io.FileIO(".header", "wb")
 		file.write(self.header)
 		file.close()
+
+		params = open(".header.params", "wt")
+		params.write('# saved parameters from the file "{:s}" (reference-only, not used by mkkdz)\n'.format(name))
+		params.write("format_major={:d}\n".format(self.formatMajor))
+		params.write("format_minor={:d}\n".format(self.formatMinor))
+		params.write("device={:s}\n".format(self.device))
+		params.write("# the property: ro.lge.factoryversion\n")
+		params.write("factoryversion={:s}\n".format(self.ro_lge_factoryversion))
+		params.write("# this is unknown, perhaps indicating block size?\n")
+		params.write("unknown0={:d}\n".format(self.unknown0))
+		params.write("# this is suspected to be a build type indicator of some flavor\n")
+		params.write("build_type={:s}\n".format(self.build_type))
+		params.write("# {:d} chunks were in original file\n".format(self.chunkCount))
+		params.write("# guessing this is a date code, perhaps anti-rollback?\n")
+		params.write("old_date_code={:s}\n".format(self.old_date_code))
+		params.write("# Appears to indicate Android version, if present\n")
+		params.write("android_version={:s}\n".format(self.android_version))
+		params.write("# right size for an MD5 of /something/\n")
+		params.write("unknown1={:s}\n".format(b2a_hex(self.unknown1)))
+		params.write("# some sort of values for /something/; absent from H901, present on ALL others\n")
+		params.write("unknown2={:s}\n".format(self.unknown2.decode("utf8")))
+		params.write("# date code?  CRC32 of thing with MD5?\n")
+		params.write("unknown3={:s}\n".format(b2a_hex(self.unknown3)))
+
+		params.close()
+
 
 	def __init__(self, name):
 		"""
@@ -930,7 +961,7 @@ class DZFileTools:
 			self.cmdExtractChunk(files)
 
 		# Save the header for later reconstruction
-		self.dz_file.saveHeader()
+		self.dz_file.saveHeader(cmd.dzfile)
 
 if __name__ == "__main__":
 	dztools = DZFileTools()
