@@ -300,6 +300,11 @@ class UNDZChunk(dz.DZChunk, UNDZUtils):
 		self.md5	= dz_item['md5']
 		self.trimCount	= dz_item['trimCount']
 		self.crc32	= dz_item['crc32']
+		self.order	= dz_item['order']
+
+		# The use of these non-.bin chunks is unknown
+		if self.chunkName[-4:] == b".img":
+			return
 
 		# This is where in the image we're supposed to go
 		targetAddr = int(self.chunkName[len(self.sliceName)+1:-4])
@@ -904,7 +909,7 @@ class DZFileTools:
 			print("[!] Cannot specify specific portions to extract when outputting image", file=sys.stderr)
 			sys.exit(1)
 		name = "image.img"
-		file = io.FileIO(name, "wb")
+		file = open(name, "+b")
 		self.dz_file.extractImage(file, name)
 		file.close()
 

@@ -47,7 +47,7 @@ class DZStruct(object):
 
 			# Sanity check
 			if self._dz_struct.size != self._dz_length:
-				print("[!] Internal error!  Chunk format wrong!", file=sys.stderr)
+				print("[!] Internal error!  Chunk format wrong! (computed={:d}, specified={:d})".format(self._dz_struct.size, self._dz_length), file=sys.stderr)
 				sys.exit(-1)
 
 		# Generate list of items that can be collapsed (truncated)
@@ -123,7 +123,7 @@ class DZChunk(DZStruct):
 		('md5',		('16s',  False)),	# MD5 of target image
 		('targetAddr',	('I',    False)),	# first block to write
 		('trimCount',	('I',    False)),	# blocks to TRIM before
-		('reserved',	('I',    True)),	# currently always zero
+		('order',	('I',    False)),	# order to write chunk
 		('crc32',	('I',    False)),	# CRC32 of target image
 		('pad',		('372s', True)),	# currently always zero
 	])
@@ -167,12 +167,12 @@ class DZFile(DZStruct):
 		('unknown2',	('50s',  True)),	# A##-M##-C##-U##-0 ?
 		('build_type',	('20s',  True)),	# "user"???
 		('unknown3',	('4s',   False)),	# version code?  CRC?
-		('androidVer',	('4s',   True)),	# Android ver, optional
-		('reserved2',	('I',    True)),	# currently always zero
-		('reserved3',	('H',    True)),	# padding?
+		('androidVer',	('10s',  True)),	# Android ver, optional
 #anti-rollback minimum date? absent from Lollipop, "122142720" on all other V10
 		('oldDateCode',	('10s',	 True)),	# prior firmware date?
-		('pad',		('180s', True)),	# currently always zero
+		('reserved5',	('I',    True)),	# currently always zero
+		('unknown4',	('I',    False)),	# sometimes 256?
+		('pad',		('172s', True)),	# currently always zero
 	])
 
 	def __init__(self):
