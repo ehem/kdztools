@@ -929,7 +929,10 @@ class DZFileTools:
 			print("[!] Cannot specify specific portions to extract when outputting image", file=sys.stderr)
 			sys.exit(1)
 		name = "image.img"
-		file = open(name, "+b")
+		try:
+			file = io.open(name, "r+b")
+		except IOError:
+			file = io.open(name, "wb")
 		self.dz_file.extractImage(file, name)
 		file.close()
 
