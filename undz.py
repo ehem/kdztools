@@ -128,6 +128,12 @@ class UNDZChunk(dz.DZChunk, UNDZUtils):
 		"""
 		return self.dataOffset
 
+	def getOrder(self):
+		"""
+		Return which pass we're supposed to be written in
+		"""
+		return self.order
+
 	def getTargetStart(self):
 		"""
 		Return the offset into the target storage medium where we start
@@ -520,8 +526,9 @@ class UNDZFile(dz.DZFile, UNDZUtils):
 		"""
 
 		# are the chunks out of order in regards to image order?
-		disorder = False
+		disorder = 0
 		last = -1
+		order = -1
 
 		while True:
 
@@ -530,8 +537,16 @@ class UNDZFile(dz.DZFile, UNDZUtils):
 			self.chunks.append(chunk)
 
 			# check ordering
+			if order > chunk.getOrder():
+				if chunk.getChunkName()[-4:] != ".img":
+					disorder += 1
+					order = chunk.getOrder()
+			elif order < chunk.getOrder():
+				last = -1
+				order = chunk.getOrder()
+
 			if last > chunk.getTargetStart():
-				disorder = True
+				disorder += 1
 			last = chunk.getTargetStart()
 
 			# Would seeking the file to the end of the compressed
@@ -544,9 +559,11 @@ class UNDZFile(dz.DZFile, UNDZUtils):
 			self.dzfile.seek(next, io.SEEK_SET)
 
 		# If I'm perverse enough to think of this...
-		if disorder:
-			print("[ ] Warning: Found out of order chunks (please report)", file=sys.stderr)
-			self.chunks.sort(key=lambda c: c.getTargetStart())
+		if disorder > 0:
+			print("[ ] Warning: Found {:d} out of order chunks (please report)".format(disorder), file=sys.stderr)
+
+		# They're in the order to write, not block order though
+		self.chunks.sort(key=lambda c: c.getTargetStart())
 
 		try:
 			emptycount = 0
