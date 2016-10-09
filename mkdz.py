@@ -115,7 +115,7 @@ class MKDZFile(dz.DZFile):
 		Load .header, basic consistency checks of header
 		"""
 
-		file = io.FileIO(".header", "rb")
+		file = io.FileIO(".dz.header", "rb")
 
 		buffer = file.read(self._dz_length)
 

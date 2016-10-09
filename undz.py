@@ -753,12 +753,12 @@ class UNDZFile(dz.DZFile, UNDZUtils):
 		"""
 		Dump the header from the original file into the output dir
 		"""
-		file = io.FileIO(".header", "wb")
+		file = io.FileIO(".dz.header", "wb")
 		file.write(self.header)
 		file.close()
 
-		params = open(".header.params", "wt")
-		params.write('# saved parameters from the file "{:s}" (reference-only, not used by mkkdz)\n'.format(name))
+		params = open(".dz.params", "wt")
+		params.write('# saved parameters from the file "{:s}" (reference-only, not used by mkdz)\n'.format(name))
 		params.write("format_major={:d}\n".format(self.formatMajor))
 		params.write("format_minor={:d}\n".format(self.formatMinor))
 		params.write("device={:s}\n".format(self.device.decode("utf8")))

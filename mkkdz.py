@@ -44,7 +44,7 @@ class KDZFileTools(kdz.KDZFile):
 		"""
 
 		params = dict()
-		file = open(os.path.join(self.indir, ".params"), "rt")
+		file = open(os.path.join(self.indir, ".kdz.params"), "rt")
 		line = file.readline()
 		while len(line) > 0:
 			line.lstrip()

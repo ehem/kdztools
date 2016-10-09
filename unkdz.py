@@ -174,7 +174,7 @@ class KDZFileTools(kdz.KDZFile):
 		Save the parameters for creating a compatible file
 		"""
 
-		params = open(os.path.join(self.outdir, ".params"), "wt")
+		params = open(os.path.join(self.outdir, ".kdz.params"), "wt")
 		params.write('# saved parameters from the file "{:s}"\n'.format(self.kdzfile))
 		params.write("version={:d}\n".format(self.header_type))
 		params.write("# note, this is actually quite fluid, dataStart just needs to be large enough\n")
