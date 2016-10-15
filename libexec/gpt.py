@@ -135,6 +135,7 @@ class GPT(object):
 
 		verbose("")
 
+		verbose("block size is {:d} bytes (shift {:d})".format(1<<self.shiftLBA, self.shiftLBA))
 		verbose("device UUID={:s}".format(str(self.uuid)))
 		verbose("myLBA={:d} alternateLBA={:d}".format(self.myLBA, self.altLBA))
 		verbose("firstUsableLBA={:d} lastUsableLBA={:d}".format(self.dataStartLBA, self.dataEndLBA))
