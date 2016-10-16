@@ -213,7 +213,11 @@ class KDZFileTools(kdz.KDZFile):
 
 	def openFile(self, kdzfile):
 		# Open the file
-		self.infile = open(kdzfile, "rb")
+		try:
+			self.infile = open(kdzfile, "rb")
+		except IOError as err:
+			print(err, file=sys.stderr)
+			sys.exit(1)
 
 		# Get length of whole file
 		self.infile.seek(0, os.SEEK_END)

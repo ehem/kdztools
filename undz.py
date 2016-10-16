@@ -472,7 +472,11 @@ class UNDZFile(dz.DZFile, UNDZUtils):
 		"""
 
 		# Open the file
-		self.dzfile = io.FileIO(name, "rb")
+		try:
+			self.dzfile = io.open(name, "rb")
+		except IOError as err:
+			print(err, file=sys.stderr)
+			sys.exit(1)
 
 		# Get length of whole file
 		self.length = self.dzfile.seek(0, io.SEEK_END)
