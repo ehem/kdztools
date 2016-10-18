@@ -306,7 +306,8 @@ class UNDZChunk(dz.DZChunk, UNDZUtils):
 		self.md5	= dz_item['md5']
 		self.trimCount	= dz_item['trimCount']
 		self.crc32	= dz_item['crc32']
-		self.order	= dz_item['order']
+		# alas, "pass" is a Python reserved word
+		self.order	= dz_item['pass']
 
 		# The use of these non-.bin chunks is unknown
 		if self.chunkName[-4:] == b".img":
