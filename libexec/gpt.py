@@ -301,9 +301,11 @@ class GPT(object):
 		for slice in self.slices:
 			if slice.startLBA <= last:
 				verbose("Note: slices are out of order in GPT")
-				self.slices.sort(key=lambda s: s.startLBA)
+				self.ordered = False
 				break
 			last = slice.endLBA
+		else:
+			self.ordered = True
 
 
 

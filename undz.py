@@ -357,12 +357,21 @@ class UNDZSlice(object):
 		"""
 		return self.end-self.start
 
+	def getIndex(self):
+		"""
+		Get our index from GPT
+		"""
+		return self.index
+
 	def display(self, sliceIdx, chunkIdx):
 		"""
 		Display information on the various chunks in our slice
 		Return the last index we used
 		"""
 		if len(self.chunks) == 0:
+			if not self.index:
+				chunkIdx = None
+				sliceIdx = -1
 			print("{:2d}/?? : {:s} (<empty>)".format(sliceIdx, self.name))
 		for chunk in self.chunks:
 			chunkIdx+=1
@@ -443,7 +452,7 @@ class UNDZSlice(object):
 
 		params.close()
 
-	def __init__(self, dz, name, start=0x7FFFFFFFFFFFFFFF, end=0):
+	def __init__(self, dz, index, name, start=0x7FFFFFFFFFFFFFFF, end=0):
 		"""
 		Initialize the instance of UNDZSlice class
 		"""
@@ -458,6 +467,7 @@ class UNDZSlice(object):
 
 		# Save a pointer to the UNDZFile
 		self.dz = dz
+		self.index = index
 
 
 
@@ -574,35 +584,41 @@ class UNDZFile(dz.DZFile, UNDZUtils):
 		try:
 			emptycount = 0
 			g = gpt.GPT(self.chunks[0].extract())
+			ordered = range(len(g.slices)) if g.ordered else range(len(g.slices)).sort(ley=lambda s: g.slices[s].startLBA)
 
 			self.shiftLBA = g.shiftLBA
 
 			next = g.dataStartLBA
-			slice = UNDZSlice(self, self.chunks[0].getSliceName(), 0, next<<self.shiftLBA)
+			slice = UNDZSlice(self, 0, self.chunks[0].getSliceName(), 0, next<<self.shiftLBA)
 			self.slices.append(slice)
 			self.sliceIdx[self.chunks[0].getSliceName()] = slice
 
+			index = 1
 			for slice in g.slices:
-				if next != slice.startLBA<<self.shiftLBA:
-					new = UNDZSlice(self, "_unallocated_" + str(emptycount), next<<self.shiftLBA, (slice.startLBA-1)<<self.shiftLBA)
-					self.slices.append(new)
-					emptycount += 1
-				next = slice.endLBA+1
-				new = UNDZSlice(self, slice.name, slice.startLBA<<self.shiftLBA, next)
+				new = UNDZSlice(self, index, slice.name, slice.startLBA<<self.shiftLBA, (slice.endLBA+1)<<self.shiftLBA)
 				self.slices.append(new)
 				self.sliceIdx[slice.name] = new
+				index += 1
+
+			for i in range(len(g.slices)):
+				if next != g.slices[i].startLBA:
+					new = UNDZSlice(self, None, "_unallocated_" + str(emptycount) + "_" + str((g.slices[i].startLBA - next)<<self.shiftLBA), next<<self.shiftLBA, (g.slices[i].startLBA-1)<<self.shiftLBA)
+					self.slices.insert(i+emptycount+1, new)
+					emptycount += 1
+				next = g.slices[i].endLBA+1
 
 			if next != g.dataEndLBA+1:
-				new = UNDZSlice(self, "_unallocated_" + str(emptycount), next, g.dataEndLBA<<self.shiftLBA)
+				new = UNDZSlice(self, None, "_unallocated_" + str(emptycount), next<<self.shiftLBA, g.dataEndLBA<<self.shiftLBA)
 				self.slices.append(new)
 				emptycount += 1
 				next = g.dataEndLBA+1
 
-			slice = UNDZSlice(self, self.chunks[-1].getSliceName(), g.dataEndLBA<<self.shiftLBA, (g.altLBA+1)<<self.shiftLBA)
+			slice = UNDZSlice(self, index, self.chunks[-1].getSliceName(), g.dataEndLBA<<self.shiftLBA, (g.altLBA+1)<<self.shiftLBA)
 			self.slices.append(slice)
 			self.sliceIdx[self.chunks[-1].getSliceName()] = slice
 
-		except NoGPT:
+		except gpt.NoGPT as err:
+			print("[!] Unable to find GPT in DZ file: {:s}".format(err))
 			pass
 
 		for chunk in self.chunks:
@@ -675,7 +691,7 @@ class UNDZFile(dz.DZFile, UNDZUtils):
 			slice = self.sliceIdx[name]
 		else:
 # FIXME: what if chunks out of order?
-			slice = UNDZSlice(self, name)
+			slice = UNDZSlice(self, self.slices[-1].getIndex()+1, name)
 			self.slices.append(slice)
 			self.sliceIdx[name] = slice
 
@@ -689,8 +705,10 @@ class UNDZFile(dz.DZFile, UNDZUtils):
 		chunkIdx = 0
 		sliceIdx = 0
 		for slice in self.slices:
-			sliceIdx+=1
-			chunkIdx = slice.display(sliceIdx, chunkIdx)
+			count = slice.display(sliceIdx, chunkIdx)
+			if count != None:
+				chunkIdx = count
+				sliceIdx+=1
 
 		for m in self.messages:
 			print(m)
@@ -706,6 +724,12 @@ class UNDZFile(dz.DZFile, UNDZUtils):
 		Return the number of slices we've got
 		"""
 		return len(self.slices)
+
+	def getSlice(self, idx):
+		"""
+		Return the slice with the given index
+		"""
+		return self.slices[idx]
 
 	def getChunkName(self, idx):
 		"""
@@ -920,13 +944,19 @@ class DZFileTools:
 			except ValueError:
 				print('[!] Bad value "{:s}" (must be number)'.format(idx), file=sys.stderr)
 				sys.exit(1)
-			if idx <= 0 or idx > self.dz_file.getSliceCount():
-				print("[!] Cannot extract out of range slice {:d} (min=1 max={:d})".format(idx, self.dz_file.getSliceCount()), file=sys.stderr)
+			if idx < 0 or idx > self.dz_file.getSlice(-1).getIndex():
+				print("[!] Cannot extract out of range slice {:d} (min=0 max={:d})".format(idx, self.dz_file.getSlice(-1).getIndex()), file=sys.stderr)
 				sys.exit(1)
-			slice = self.dz_file.slices[idx-1]
+
+			cur = idx
+			slice = self.dz_file.getSlice(cur)
+			while slice.getIndex() < idx:
+				cur += idx - slice.getIndex()
+				slice = self.dz_file.getSlice(cur)
+
 			name = slice.getSliceName() + ".image"
 			file = io.FileIO(name, "wb")
-			self.dz_file.extractSlice(file, name, idx-1)
+			self.dz_file.extractSlice(file, name, cur)
 			file.close()
 
 	def cmdExtractImage(self, files):
