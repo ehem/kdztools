@@ -442,7 +442,9 @@ class UNDZSlice(object):
 		if len(self.chunks) > 0:
 			last = self.chunks[-1]
 			params.write(u"lastWipe={:d}\n".format((last.getTargetStart() >> self.dz.shiftLBA) + last.trimCount))
-			params.write(u"# the block size is important (though not too likely to change in near future\n")
+			params.write(u"# Indicates what pass/order this should be written in\n")
+			params.write(u"pass={:d}\n".format(self.chunks[0].getOrder()))
+			params.write(u"# the block size is important!\n")
 			params.write(u"blockSize={:d}\n".format(1<<self.dz.shiftLBA))
 			params.write(u"blockShift={:d}\n".format(self.dz.shiftLBA))
 		else:

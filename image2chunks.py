@@ -361,7 +361,7 @@ class Image2Chunks(dz.DZChunk):
 			print("[!] {:s} is a phantom slice, skipping!".format(name))
 			return False
 
-		for k in 'blockShift', 'startLBA', 'endLBA', 'lastWipe':
+		for k in 'blockShift', 'startLBA', 'endLBA', 'lastWipe', 'pass':
 			if k not in params:
 				print("Parameter value \"{:s}\" is missing, unable to continue".format(k))
 				sys.exit(1)
@@ -371,6 +371,7 @@ class Image2Chunks(dz.DZChunk):
 		self.startLBA	= params['startLBA']
 		self.endLBA	= params['endLBA']
 		self.lastWipe	= params['lastWipe']
+		self.order	= params['pass']
 
 		return True
 
@@ -505,6 +506,7 @@ class Image2Chunks(dz.DZChunk):
 				'targetAddr':	nl.targetAddr,
 				'trimCount':	nl.trimCount,
 				'crc32':	crc & 0xFFFFFFFF,
+				'pass':		self.order,
 			}
 
 			nl.header = self.packdict(values)
