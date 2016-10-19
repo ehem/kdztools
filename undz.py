@@ -578,27 +578,27 @@ class UNDZFile(dz.DZFile, UNDZUtils):
 			self.shiftLBA = g.shiftLBA
 
 			next = g.dataStartLBA
-			slice = UNDZSlice(self, self.chunks[0].getSliceName(), 0, next<<g.shiftLBA)
+			slice = UNDZSlice(self, self.chunks[0].getSliceName(), 0, next<<self.shiftLBA)
 			self.slices.append(slice)
 			self.sliceIdx[self.chunks[0].getSliceName()] = slice
 
 			for slice in g.slices:
-				if next != slice.startLBA<<g.shiftLBA:
-					new = UNDZSlice(self, "_unallocated_" + str(emptycount), next<<g.shiftLBA, (slice.startLBA-1)<<g.shiftLBA)
+				if next != slice.startLBA<<self.shiftLBA:
+					new = UNDZSlice(self, "_unallocated_" + str(emptycount), next<<self.shiftLBA, (slice.startLBA-1)<<self.shiftLBA)
 					self.slices.append(new)
 					emptycount += 1
-				next = (slice.endLBA+1)<<g.shiftLBA
-				new = UNDZSlice(self, slice.name, slice.startLBA<<g.shiftLBA, next)
+				next = slice.endLBA+1
+				new = UNDZSlice(self, slice.name, slice.startLBA<<self.shiftLBA, next)
 				self.slices.append(new)
 				self.sliceIdx[slice.name] = new
 
-			if next != (g.dataEndLBA+1)<<g.shiftLBA:
-				new = UNDZSlice(self, "_unallocated_" + str(emptycount), next, g.dataEndLBA<<g.shiftLBA)
+			if next != g.dataEndLBA+1:
+				new = UNDZSlice(self, "_unallocated_" + str(emptycount), next, g.dataEndLBA<<self.shiftLBA)
 				self.slices.append(new)
 				emptycount += 1
-				next = (g.dataEndLBA+1)<<g.shiftLBA
+				next = g.dataEndLBA+1
 
-			slice = UNDZSlice(self, self.chunks[-1].getSliceName(), g.dataEndLBA<<g.shiftLBA, (g.altLBA+1)<<g.shiftLBA)
+			slice = UNDZSlice(self, self.chunks[-1].getSliceName(), g.dataEndLBA<<self.shiftLBA, (g.altLBA+1)<<self.shiftLBA)
 			self.slices.append(slice)
 			self.sliceIdx[self.chunks[-1].getSliceName()] = slice
 
