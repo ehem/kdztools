@@ -899,18 +899,18 @@ class DZFileTools:
 			except ValueError:
 				print('[!] Bad value "{:s}" (must be number)'.format(idx), file=sys.stderr)
 				sys.exit(1)
-			if idx <= 0 or idx > self.dz_file.getChunkCount():
-				print("[!] Cannot extract out of range chunk {:d} (min=1 max={:d})".format(idx, len(self.dz_file.getChunkCount())), file=sys.stderr)
+			if idx < 0 or idx >= self.dz_file.getChunkCount():
+				print("[!] Cannot extract out of range chunk {:d} (min=0 max={:d})".format(idx, self.dz_file.getChunkCount()-1), file=sys.stderr)
 				sys.exit(1)
-			name = self.dz_file.getChunkName(idx-1)
+			name = self.dz_file.getChunkName(idx)
 			file = io.FileIO(name, "wb")
-			self.dz_file.extractChunk(file, name, idx-1)
+			self.dz_file.extractChunk(file, name, idx)
 			file.close()
 
 	def cmdExtractChunkfile(self, files):
 		if len(files) == 0:
 			print("[+] Extracting all chunkfiles!\n")
-			files = range(1, self.dz_file.getChunkCount()+1)
+			files = range(0, self.dz_file.getChunkCount())
 		elif len(files) == 1:
 			print("[+] Extracting single chunkfile!\n")
 		else:
@@ -922,12 +922,12 @@ class DZFileTools:
 			except ValueError:
 				print('[!] Bad value "{:s}" (must be number)'.format(idx), file=sys.stderr)
 				sys.exit(1)
-			if idx <= 0 or idx > self.dz_file.getChunkCount():
-				print("[!] Cannot extract out of range chunkfile {:d} (min=1 max={:d})".format(idx, len(self.dz_file.getChunkCount())), file=sys.stderr)
+			if idx < 0 or idx >= self.dz_file.getChunkCount():
+				print("[!] Cannot extract out of range chunkfile {:d} (min=0 max={:d})".format(idx, self.dz_file.getChunkCount()-1), file=sys.stderr)
 				sys.exit(1)
-			name = self.dz_file.getChunkName(idx-1) + ".chunk"
-			file = io.FileIO(name, "wb")
-			self.dz_file.extractChunkfile(file, name, idx-1)
+			name = self.dz_file.getChunkName(idx) + ".chunk"
+			file = io.open(name, "wb")
+			self.dz_file.extractChunkfile(file, name, idx)
 			file.close()
 
 	def cmdExtractSlice(self, files):
