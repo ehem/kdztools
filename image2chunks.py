@@ -361,7 +361,7 @@ class Image2Chunks(dz.DZChunk):
 			print("[!] {:s} is a phantom slice, skipping!".format(name))
 			return False
 
-		for k in 'blockShift', 'startLBA', 'endLBA', 'lastWipe', 'pass':
+		for k in 'blockShift', 'startLBA', 'endLBA', 'lastWipe', 'dev':
 			if k not in params:
 				print("Parameter value \"{:s}\" is missing, unable to continue".format(k))
 				sys.exit(1)
