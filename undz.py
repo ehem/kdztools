@@ -519,7 +519,7 @@ class UNDZFile(dz.DZFile, UNDZUtils):
 		self.formatMinor = dz_file['formatMinor']
 
 		# currently only "user" has been seen in wild
-		self.build_type = dz_file['build_type']
+		self.buildType = dz_file['buildType']
 
 		# save this for consistency checking
 		self.md5 = dz_file['md5']
@@ -797,7 +797,7 @@ class UNDZFile(dz.DZFile, UNDZUtils):
 		params.write("# this is unknown, perhaps indicating block size?\n")
 		params.write("unknown0={:d}\n".format(self.unknown0))
 		params.write("# this is suspected to be a build type indicator of some flavor\n")
-		params.write("build_type={:s}\n".format(self.build_type.decode("utf8")))
+		params.write("build_type={:s}\n".format(self.buildType.decode("utf8")))
 		params.write("# {:d} chunks were in original file\n".format(self.chunkCount))
 		params.write("# guessing this is a date code, perhaps anti-rollback?\n")
 		params.write("old_date_code={:s}\n".format(self.old_date_code.decode("utf8")))

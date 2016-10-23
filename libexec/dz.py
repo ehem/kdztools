@@ -70,6 +70,8 @@ class DZStruct(object):
 			if self._dz_format_dict[k][0][-1] == 's':
 				l = int(self._dz_format_dict[k][0][:-1])
 				dout[k] = (din[k] if k in din else b"").ljust(l, b'\x00')
+			elif not k in din and k in self._dz_collapsibles:
+				dout[k] = 0
 			else:
 				dout[k] = din[k]
 
@@ -165,7 +167,7 @@ class DZFile(DZStruct):
 		('reserved4',	('H',    True)),	# currently always zero
 		('unknown1',	('16s',  False)),	# unknown, MD5 of thing?
 		('unknown2',	('50s',  True)),	# A##-M##-C##-U##-0 ?
-		('build_type',	('20s',  True)),	# "user"???
+		('buildType',	('20s',  True)),	# "user"???
 		('unknown3',	('4s',   False)),	# version code?  CRC?
 		('androidVer',	('10s',  True)),	# Android ver, optional
 #anti-rollback minimum date? absent from Lollipop, "122142720" on all other V10
