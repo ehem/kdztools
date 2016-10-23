@@ -371,7 +371,7 @@ class Image2Chunks(dz.DZChunk):
 		self.startLBA	= params['startLBA']
 		self.endLBA	= params['endLBA']
 		self.lastWipe	= params['lastWipe']
-		self.order	= params['pass']
+		self.dev	= params['dev']
 
 		return True
 
@@ -506,7 +506,7 @@ class Image2Chunks(dz.DZChunk):
 				'targetAddr':	nl.targetAddr,
 				'trimCount':	nl.trimCount,
 				'crc32':	crc & 0xFFFFFFFF,
-				'pass':		self.order,
+				'dev':		self.dev,
 			}
 
 			nl.header = self.packdict(values)

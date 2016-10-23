@@ -128,11 +128,11 @@ class UNDZChunk(dz.DZChunk, UNDZUtils):
 		"""
 		return self.dataOffset
 
-	def getOrder(self):
+	def getDev(self):
 		"""
 		Return which pass we're supposed to be written in
 		"""
-		return self.order
+		return self.dev
 
 	def getTargetStart(self):
 		"""
@@ -306,8 +306,7 @@ class UNDZChunk(dz.DZChunk, UNDZUtils):
 		self.md5	= dz_item['md5']
 		self.trimCount	= dz_item['trimCount']
 		self.crc32	= dz_item['crc32']
-		# alas, "pass" is a Python reserved word
-		self.order	= dz_item['pass']
+		self.dev	= dz_item['dev']
 
 		# The use of these non-.bin chunks is unknown
 		if self.chunkName[-4:] == b".img":
@@ -442,8 +441,8 @@ class UNDZSlice(object):
 		if len(self.chunks) > 0:
 			last = self.chunks[-1]
 			params.write(u"lastWipe={:d}\n".format((last.getTargetStart() >> self.dz.shiftLBA) + last.trimCount))
-			params.write(u"# Indicates what pass/order this should be written in\n")
-			params.write(u"pass={:d}\n".format(self.chunks[0].getOrder()))
+			params.write(u"# Indicates which flash device this should be written in\n")
+			params.write(u"dev={:d}\n".format(self.chunks[0].getDev()))
 			params.write(u"# the block size is important!\n")
 			params.write(u"blockSize={:d}\n".format(1<<self.dz.shiftLBA))
 			params.write(u"blockShift={:d}\n".format(self.dz.shiftLBA))
@@ -546,7 +545,7 @@ class UNDZFile(dz.DZFile, UNDZUtils):
 		# are the chunks out of order in regards to image order?
 		disorder = 0
 		last = -1
-		order = -1
+		dev = -1
 
 		while True:
 
@@ -555,13 +554,13 @@ class UNDZFile(dz.DZFile, UNDZUtils):
 			self.chunks.append(chunk)
 
 			# check ordering
-			if order > chunk.getOrder():
+			if dev > chunk.getDev():
 				if chunk.getChunkName()[-4:] != ".img":
 					disorder += 1
-					order = chunk.getOrder()
-			elif order < chunk.getOrder():
+					dev = chunk.getDev()
+			elif dev < chunk.getDev():
 				last = -1
-				order = chunk.getOrder()
+				dev = chunk.getDev()
 
 			if last > chunk.getTargetStart():
 				disorder += 1
@@ -581,7 +580,7 @@ class UNDZFile(dz.DZFile, UNDZUtils):
 			print("[ ] Warning: Found {:d} out of order chunks (please report)".format(disorder), file=sys.stderr)
 
 		# They're in the order to write, not block order though
-		self.chunks.sort(key=lambda c: c.getTargetStart())
+		self.chunks.sort(key=lambda c: (c.getTargetStart() + (c.getDev()<<48)))
 
 		try:
 			emptycount = 0

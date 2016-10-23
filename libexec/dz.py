@@ -123,7 +123,7 @@ class DZChunk(DZStruct):
 		('md5',		('16s',  False)),	# MD5 of target image
 		('targetAddr',	('I',    False)),	# first block to write
 		('trimCount',	('I',    False)),	# blocks to TRIM before
-		('pass',	('I',    False)),	# pass to write chunk
+		('dev',		('I',    False)),	# flash device Id
 		('crc32',	('I',    False)),	# CRC32 of target image
 		('pad',		('372s', True)),	# currently always zero
 	])

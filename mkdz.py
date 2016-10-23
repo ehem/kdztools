@@ -52,6 +52,12 @@ class MKDZChunk(dz.DZChunk):
 		"""
 		return self.end
 
+	def getDev(self):
+		"""
+		Return which pass we're written during
+		"""
+		return self.dev
+
 	def list(self, index):
 		"""
 		Output a listing of our block
@@ -95,6 +101,8 @@ class MKDZChunk(dz.DZChunk):
 
 		self.start = dz_item['targetAddr']
 
+		self.dev = dz_item['dev']
+
 		if (dz_item['targetSize'] >> blockShift) > dz_item['trimCount']:
 			print("[!] target size is more than number of blocks to wipe?!  Inconceivable!", file=sys.stderr)
 			sys.exit(1)
@@ -134,18 +142,22 @@ class MKDZFile(dz.DZFile):
 			if name[-6:] == ".chunk":
 				self.chunks.append(MKDZChunk(name))
 
-		self.chunks.sort(key=lambda c: c.getStart())
+# FIXME: the .img chunks are at end, even though dev=0
+		self.chunks.sort(key=lambda c: (c.getStart() + (c.getDev()<<48)))
 
 	def checkChunks(self):
 		"""
 		Scan the chunk list, look for problematic issues
 		"""
 
-		last = 0
+		dev = -1
 		for chunk in self.chunks:
+			if chunk.getDev() != dev:
+				dev = chunk.getDev()
+				last = 0
 			if chunk.getStart() < last:
 				print("[!] chunk {:s} overlaps!".format(chunk.chunkName), file=sys.stderr)
-				os.exit(1)
+				sys.exit(1)
 			last = chunk.getEnd()
 
 	def computeChecksums(self):
