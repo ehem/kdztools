@@ -447,6 +447,7 @@ class Image2Chunks(dz.DZChunk):
 				'targetAddr':	targetAddr,
 				'trimCount':	trimCount,
 				'crc32':	crc & 0xFFFFFFFF,
+				'dev':		self.dev,
 			}
 
 			header = self.packdict(values)
@@ -668,6 +669,7 @@ class Image2Chunks(dz.DZChunk):
 				'targetAddr':	targetAddr,
 				'trimCount':	wipeData >> self.blockShift,
 				'crc32':	crc & 0xFFFFFFFF,
+				'dev':		self.dev,
 			}
 
 			header = self.packdict(values)
