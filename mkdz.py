@@ -24,15 +24,13 @@ import io
 import hashlib
 import argparse
 
+from binascii import a2b_hex
+
 # our tools are in "libexec"
 sys.path.append(os.path.join(sys.path[0], "libexec"))
 
 import dz
 
-
-# Sigh, temporarily have these hard-coded.  :-(
-blockShift = 9
-blockSize = 1<<blockShift
 
 class MKDZChunk(dz.DZChunk):
 	"""
@@ -82,7 +80,7 @@ class MKDZChunk(dz.DZChunk):
 
 		input.close()
 
-	def __init__(self, name):
+	def __init__(self, name, blockShift):
 		"""
 		Initialize MKDZChunk, a chunk of a DZ file
 		"""
@@ -118,20 +116,72 @@ class MKDZFile(dz.DZFile):
 	This child includes code oriented towards constructing a DZ file
 	"""
 
-	def loadHeader(self):
+	def loadParams(self):
 		"""
-		Load .header, basic consistency checks of header
+		Load .dz.params, values found in the original DZ file needed
+		for constructing new DZ file (but can be altered)
 		"""
 
-		file = io.FileIO(".dz.header", "rb")
+		params = dict()
+		file = io.open(".dz.params", "rt")
+		line = file.readline()
+		while len(line) > 0:
+			line.lstrip()
+			line = line.partition("#")[0]
+			if len(line) == 0:
+				line = file.readline()
+				continue
+			parts = line.partition("=")
+			if len(parts[1]) == 0:
+				print("[!] Bad line in {:s} parameter file".format(".dz.params"), file=sys.stderr)
+			var = parts[0].rstrip()
+			try:
+				val = int(parts[2].strip())
+			except ValueError:
+				val = parts[2].strip()
+			params[var] = val
+			line = file.readline()
 
-		buffer = file.read(self._dz_length)
+		file.close()
 
-		self.dz_item = self.unpackdict(buffer)
+		for new, old in (("androidVer", "android_version"), ("version", "factoryversion")):
+			params[new] = params[old]
+			del params[old]
 
-		if not self.dz_item:
-			print("[!] Error, .header is missing magic number, cannot continue!")
-			os.exit(1)
+		for k in [k for k in params.keys()]:
+			t = k.partition('_')
+			if t[1]:
+				while t[1]:
+					new = t[0] + t[2].capitalize()
+					t = new.partition('_')
+				params[new] = params[k]
+
+		for k in self._dz_format_dict.keys():
+			if k[0:8] == "reserved" or k == "header" or k == "pad" or k == "chunkCount" or k == "md5":
+				continue
+			if k not in params:
+				print("[!] Parameter value \"{:s}\" is missing, unable to continue".format(k), file=sys.stderr)
+				sys.exit(1)
+			elif hasattr(params[k], "encode"):
+				params[k] = params[k].encode("utf8")
+
+		if params['formatMajor'] != 2:
+			print("[!] File format version not 2, cannot continue", file=sys.stderr)
+			sys.exit(1)
+
+		if params['formatMinor'] != 1:
+			print("[!] Warning: File appears to be a v{:d}.{:d} format file, compatibility uncertain!".format(params['format_major'], params['format_minor']), file=sys.stderr)
+
+		for k in 'unknown1', 'unknown3':
+			params[k] = a2b_hex(params[k])
+
+		for k in 'blockShift',:
+			if k not in params:
+				print("[!] Parameter value \"{:s}\" is missing, unable to continue".format(k))
+				sys.exit(1)
+
+		self.blockShift = params['blockShift']
+		self.dz_item = params
 
 	def loadChunks(self):
 		"""
@@ -140,10 +190,9 @@ class MKDZFile(dz.DZFile):
 
 		for name in os.listdir("."):
 			if name[-6:] == ".chunk":
-				self.chunks.append(MKDZChunk(name))
+				self.chunks.append(MKDZChunk(name, self.blockShift))
 
-# FIXME: the .img chunks are at end, even though dev=0
-		self.chunks.sort(key=lambda c: (c.getStart() + (c.getDev()<<48)))
+		self.chunks.sort(key=lambda c: (c.getStart() + (c.getDev()<<48) + (1<<56 if c.chunkName[-4:] == ".img" else 0)))
 
 	def checkChunks(self):
 		"""
@@ -215,7 +264,7 @@ class MKDZFile(dz.DZFile):
 
 		os.chdir(dirname)
 
-		self.loadHeader()
+		self.loadParams()
 
 		self.chunks = []
 

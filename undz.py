@@ -102,7 +102,10 @@ class UNDZChunk(dz.DZChunk, UNDZUtils):
 		"""
 		Return the name of our chunk
 		"""
-		return self.chunkName.decode("utf8")
+		name = self.chunkName.decode("utf8")
+		if self.dev > 0:
+			name = chr(ord('A') + self.dev) + "." + name
+		return name
 
 	def getSliceName(self):
 		"""
@@ -732,6 +735,12 @@ class UNDZFile(dz.DZFile, UNDZUtils):
 		"""
 		return self.slices[idx]
 
+	def getChunk(self, idx):
+		"""
+		Return the chunk with the given index
+		"""
+		return self.chunks[idx]
+
 	def getChunkName(self, idx):
 		"""
 		Return the name of the given chunk index
@@ -783,10 +792,6 @@ class UNDZFile(dz.DZFile, UNDZUtils):
 		"""
 		Dump the header from the original file into the output dir
 		"""
-		file = io.FileIO(".dz.header", "wb")
-		file.write(self.header)
-		file.close()
-
 		params = open(".dz.params", "wt")
 		params.write('# saved parameters from the file "{:s}" (reference-only, not used by mkdz)\n'.format(name))
 		params.write("format_major={:d}\n".format(self.formatMajor))
@@ -794,6 +799,8 @@ class UNDZFile(dz.DZFile, UNDZUtils):
 		params.write("device={:s}\n".format(self.device.decode("utf8")))
 		params.write("# the property: ro.lge.factoryversion\n")
 		params.write("factoryversion={:s}\n".format(self.ro_lge_factoryversion.decode("utf8")))
+		params.write("# the block size is needed for some sanity checks\n")
+		params.write("blockShift={:d}\nblockSize={:d}\n".format(self.shiftLBA, 1<<self.shiftLBA))
 		params.write("# this is unknown, perhaps indicating block size?\n")
 		params.write("unknown0={:d}\n".format(self.unknown0))
 		params.write("# this is suspected to be a build type indicator of some flavor\n")
@@ -876,7 +883,6 @@ class DZFileTools:
 		group.add_argument('-s', '--single', help='extract diskslice(s) (partition(s)) (all by default)', action='store_true', dest='extractSlice')
 		group.add_argument('-i', '--image', help='extract all slices/partitions as a disk image', action='store_true', dest='extractImage')
 		parser.add_argument('-d', '--dir', '-o', '--out', help='output location', action='store', dest='outdir')
-		parser.add_argument('-b', '--blocksize', help='blocksize used on the device', action='store', dest='blocksize')
 
 		return parser.parse_known_args()
 
@@ -979,21 +985,6 @@ class DZFileTools:
 
 		if cmd.outdir:
 			self.outdir = cmd.outdir
-
-		if cmd.blocksize:
-			cmd.blocksize = int(cmd.blocksize)
-			if cmd.blocksize & (cmd.blocksize-1):
-				print("[!] Error: Specified block size is not a power of 2", file=sys.stderr)
-				sys.exit(1)
-			size = cmd.blocksize
-			result = 0
-			shift = 32
-			while shift > 0:
-				if (size>>shift)>0:
-					size>>=shift
-					result+=shift
-				shift>>=1
-			self.shiftLBA = result
 
 		self.dz_file = UNDZFile(cmd.dzfile)
 

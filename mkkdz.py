@@ -40,7 +40,7 @@ class KDZFileTools(kdz.KDZFile):
 
 	def loadParams(self):
 		"""
-		Loads the .params file for output, saves the values
+		Loads the .kdz.params file for output, saves the values
 		"""
 
 		params = dict()
