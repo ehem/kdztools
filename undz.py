@@ -376,8 +376,8 @@ class UNDZSlice(object):
 				sliceIdx = -1
 			print("{:2d}/?? : {:s} (<empty>)".format(sliceIdx, self.name))
 		for chunk in self.chunks:
-			chunkIdx+=1
 			chunk.display(sliceIdx, chunkIdx)
+			chunkIdx+=1
 		return chunkIdx
 
 	def getChunkCount(self):
@@ -893,7 +893,7 @@ class DZFileTools:
 	def cmdExtractChunk(self, files):
 		if len(files) == 0:
 			print("[+] Extracting all chunks!\n")
-			files = range(1, self.dz_file.getChunkCount()+1)
+			files = range(0, self.dz_file.getChunkCount())
 		elif len(files) == 1:
 			print("[+] Extracting single chunk!\n")
 		else:
@@ -939,7 +939,7 @@ class DZFileTools:
 	def cmdExtractSlice(self, files):
 		if len(files) == 0:
 			print("[+] Extracting all slices^Wpartitions\n")
-			files = range(1, self.dz_file.getSliceCount()+1)
+			files = range(0, self.dz_file.getSlice(-1).getIndex()+1)
 		elif len(files) == 1:
 			print("[+] Extracting single slice^Wpartition!\n")
 		else:
@@ -958,7 +958,7 @@ class DZFileTools:
 			cur = idx
 			slice = self.dz_file.getSlice(cur)
 			while slice.getIndex() < idx:
-				cur += idx - slice.getIndex()
+				cur += idx - slice.getIndex() if slice.getIndex() else 1
 				slice = self.dz_file.getSlice(cur)
 
 			name = slice.getSliceName() + ".image"
