@@ -171,6 +171,9 @@ class GPT(object):
 		Try to parse a buffer as a GPT header, return None on failure
 		"""
 
+		if len(buf) < self._gpt_size:
+			raise NoGPT("Failed to locate GPT")
+
 		data = dict(zip(
 			self._gpt_head_fmt.keys(),
 			self._gpt_struct.unpack(buf[0:self._gpt_size])
