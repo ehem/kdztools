@@ -410,7 +410,7 @@ image was unmodified, and image2chunks.py was used with its --sparse option,
 it should be identical to the original file.  This second statement relies on
 behavior of the OS and may not work precisely on all systems.  Exactly
 identical files have only been shown on Linux with system.image being unpacked
-onto a EXT4 FS (dzextracted being on EXT4).  EXT2/3 may also work if mounted
+onto a EXT4 FS (dzextracted being on EXT4).  EXT2/3 will also work if mounted
 using the EXT4's backwards compatibility mode, rather than the native
 implementation of EXT2/3.  Most other flavors of Unix should get sane output,
 but not as likely to be identical.
