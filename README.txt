@@ -271,9 +271,9 @@ $ undz -f kdzextracted/H90120j_00.dz -s 51
 [+] Extracting system_9554936.bin to system.image
 $ 
 
-At this point you can modify out/system.image to your liking.  For this
-particular device (LG H901), system.image is an EXT4 filesystem.  Many tools
-exist for modifying EXT4 filesystems and these should work fine.
+The theory was at this point you can modify out/system.image to your liking.
+For this particular device (LG H901), system.image is an EXT4 filesystem.  Many
+tools exist for modifying EXT4 filesystems and these should work fine.
 
 The next step would be reconstructing the file.  There are three steps, turning
 the files into chunks, merging them together into a DZ file, and then merging
@@ -295,6 +295,11 @@ which areas of the image haven't been written to.  Probing marks an awful lot
 of areas as holes, which leaves me uncomfortable believing the results to be
 sane.  As such I reccommend the first if available (ext2simg is known to work
 for Linux, but I'm unsure Windows binaries are available).
+
+WARNING: It has been found there is some additional unknown verification
+mechanism in LGE's tools.  Due to this mechanism currently the generated KDZ
+files haven't been shown to work.  There are some guesses as to where the
+mechanism is, but as of now not enough is known to work around it.
 
 $ image2chunks --ext4 dzextracted/system.image
 [+] Compressing system.image to system_901120.bin (0 empty blocks)
@@ -434,6 +439,19 @@ look to be harmless to simply copy the value from an existing file, but others
 are totally unknown to me at this time.  Two fields look to be date codes of
 some flavor (easy, simply copy).  I worry more of these need to be regenerated,
 but I've got no idea what to put in new files.
+
+WARNING: As of this writing it appears the fear of the unknowns was valid.
+According to reports it appears there is an additional verification mechanism
+which needs to be worked around.  At the moment I'm guessing "unknown1" (saved
+in dzextracted/.dz.params) is a MD5 of some portion of the image.
+Unfortunately without knowing which portion, it cannot be adjusted.  Similarly
+"unknown3" could be a CRC-32 of the same area.  My fear is "unknown1" could be
+a keyed hash at which point fixing is impossible unless we discover what/where
+the key is.
+
+One piece of good news is I'm pretty confident unpacking mostly works
+correctly.  The one quirk is newer LGE devices (the G5) the DZ format is
+somewhat modified and unpacking doesn't yet meet my expectations.
 
 
 -------------------------------------------
