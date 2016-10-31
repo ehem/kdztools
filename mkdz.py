@@ -246,6 +246,9 @@ class MKDZFile(dz.DZFile):
 		self.dz_item['md5'] = self.md5Header
 		self.dz_item['chunkCount'] = len(self.chunks)
 
+		# this date code looks like an integer, but is really a string!
+		self.dz_item['oldDateCode'] = str(self.dz_item['oldDateCode'])
+
 		buffer = self.packdict(self.dz_item)
 
 		file.write(buffer)
