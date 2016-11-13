@@ -538,6 +538,7 @@ class UNDZFile(dz.DZFile, UNDZUtils):
 		self.device = dz_file['device']
 		self.android_version = dz_file['androidVer']
 		self.unknown4 = dz_file['unknown4']
+		self.unknown5 = dz_file['unknown5']
 
 
 	def loadChunks(self):
@@ -818,6 +819,8 @@ class UNDZFile(dz.DZFile, UNDZUtils):
 		params.write("unknown3={:s}\n".format(b2a_hex(self.unknown3).decode("utf8")))
 		params.write("# flagging something?\n")
 		params.write("unknown4={:d}\n".format(self.unknown4))
+		params.write("# this almost looks like a bar-code of bytes?\n")
+		params.write("unknown5={:d}\n".format(self.unknown5))
 
 		params.close()
 
