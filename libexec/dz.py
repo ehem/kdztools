@@ -174,7 +174,8 @@ class DZFile(DZStruct):
 		('oldDateCode',	('10s',	 True)),	# prior firmware date?
 		('reserved5',	('I',    True)),	# currently always zero
 		('unknown4',	('I',    False)),	# sometimes 256?
-		('pad',		('172s', True)),	# currently always zero
+		('unknown5',	('Q',    False)),	# ???
+		('pad',		('164s', True)),	# currently always zero
 	])
 
 	def __init__(self):
