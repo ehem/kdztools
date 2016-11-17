@@ -429,7 +429,8 @@ class UNDZSlice(object):
 				chunk.extractChunk(file, name)
 
 		# it is possible for chunks wipe area to extend beyond slice
-		file.truncate(self.getLength())
+		if len(self.chunks) > 0:
+			file.truncate(self.getLength())
 
 
 		# write a params file for saving values used during recreate
@@ -456,7 +457,7 @@ class UNDZSlice(object):
 
 		params.close()
 
-	def __init__(self, dz, index, name, start=0x7FFFFFFFFFFFFFFF, end=0):
+	def __init__(self, dz, index, name, start, end):
 		"""
 		Initialize the instance of UNDZSlice class
 		"""
@@ -696,7 +697,7 @@ class UNDZFile(dz.DZFile, UNDZUtils):
 			slice = self.sliceIdx[name]
 		else:
 # FIXME: what if chunks out of order?
-			slice = UNDZSlice(self, self.slices[-1].getIndex()+1, name)
+			slice = UNDZSlice(self, self.slices[-1].getIndex()+1, name, chunk.getTargetStart(), chunk.getTargetEnd())
 			self.slices.append(slice)
 			self.sliceIdx[name] = slice
 
