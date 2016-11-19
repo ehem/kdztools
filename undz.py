@@ -429,7 +429,8 @@ class UNDZSlice(object):
 				chunk.extractChunk(file, name)
 
 		# it is possible for chunks wipe area to extend beyond slice
-		file.truncate(self.getLength())
+		if self.getLength() >= 0:
+			file.truncate(self.getLength())
 
 
 		# write a params file for saving values used during recreate
