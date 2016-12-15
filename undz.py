@@ -26,6 +26,7 @@ import zlib
 import argparse
 import hashlib
 from binascii import crc32, b2a_hex
+from uuid import UUID
 
 # our tools are in "libexec"
 sys.path.append(os.path.join(sys.path[0], "libexec"))
@@ -590,7 +591,7 @@ class UNDZFile(dz.DZFile, UNDZUtils):
 		try:
 			emptycount = 0
 			g = gpt.GPT(self.chunks[0].extract())
-			ordered = range(len(g.slices)) if g.ordered else range(len(g.slices)).sort(ley=lambda s: g.slices[s].startLBA)
+			ordered = range(len(g.slices)) if g.ordered else range(len(g.slices)).sort(key=lambda s: g.slices[s].startLBA)
 
 			self.shiftLBA = g.shiftLBA
 
@@ -598,6 +599,13 @@ class UNDZFile(dz.DZFile, UNDZUtils):
 			slice = UNDZSlice(self, 0, self.chunks[0].getSliceName(), 0, next<<self.shiftLBA)
 			self.slices.append(slice)
 			self.sliceIdx[self.chunks[0].getSliceName()] = slice
+
+			index = 0
+			while index < len(g.slices):
+				if g.slices[index].type == UUID(int=0):
+					del g.slices[index]
+				else:
+					index += 1
 
 			index = 1
 			for slice in g.slices:

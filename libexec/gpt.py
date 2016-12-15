@@ -67,10 +67,10 @@ class GPTSlice(object):
 		"""
 
 		if self.type == UUID(int=0):
-			verbose("There is an empty slice entry.")
+			verbose("Name: <empty entry>")
 			return None
 
-		verbose("Name: \"{:s}\" start={:d} end={:d}".format(self.name, self.startLBA, self.endLBA))
+		verbose("Name: \"{:s}\" start={:d} end={:d} count={:d}".format(self.name, self.startLBA, self.endLBA, self.endLBA-self.startLBA+1))
 		verbose("typ={:s} id={:s}".format(str(self.type), str(self.uuid)))
 
 	def __init__(self, buf):
@@ -83,8 +83,8 @@ class GPTSlice(object):
 			self._gpt_struct.unpack(buf)
 		))
 
-		self.type = UUID(bytes_le=data['type'])
-		self.uuid = UUID(bytes_le=data['uuid'])
+		self.type = UUID(bytes=data['type'])
+		self.uuid = UUID(bytes=data['uuid'])
 		self.startLBA = data['startLBA']
 		self.endLBA = data['endLBA']
 		self.flags = data['flags']
@@ -136,9 +136,8 @@ class GPT(object):
 		verbose("")
 
 		verbose("block size is {:d} bytes (shift {:d})".format(1<<self.shiftLBA, self.shiftLBA))
-		verbose("device UUID={:s}".format(str(self.uuid)))
-		verbose("myLBA={:d} alternateLBA={:d}".format(self.myLBA, self.altLBA))
-		verbose("firstUsableLBA={:d} lastUsableLBA={:d}".format(self.dataStartLBA, self.dataEndLBA))
+		verbose("device={:s}".format(str(self.uuid)))
+		verbose("myLBA={:d} altLBA={:d} dataStart={:d} dataEnd={:d}".format(self.myLBA, self.altLBA, self.dataStartLBA, self.dataEndLBA))
 
 		verbose("")
 
@@ -157,10 +156,11 @@ class GPT(object):
 
 		current = self.dataStartLBA
 		for slice in self.slices:
-			if slice.startLBA != current:
-				verbose("Note: non-contiguous ({:d} unused)".format(slice.startLBA-current))
+			if slice.type != UUID(int=0):
+				if slice.startLBA != current:
+					verbose("Note: non-contiguous ({:d} unused)".format(slice.startLBA-current))
+				current = slice.endLBA + 1
 			slice.display()
-			current = slice.endLBA + 1
 		current-=1
 		if self.dataEndLBA != current:
 			verbose("Note: empty LBAs at end ({:d} unused)".format(self.dataEndLBA-current))
@@ -201,7 +201,7 @@ class GPT(object):
 
 
 
-	def __init__(self, buf, lbaMinShift=9, lbaMaxShift=16):
+	def __init__(self, buf, type=None, lbaMinShift=9, lbaMaxShift=16):
 		"""
 		Initialize the GPT class
 		"""
@@ -256,7 +256,7 @@ class GPT(object):
 		self.altLBA = data['altLBA']
 		self.dataStartLBA = data['dataStartLBA']
 		self.dataEndLBA = data['dataEndLBA']
-		self.uuid = UUID(bytes_le=data['uuid'])
+		self.uuid = UUID(bytes=data['uuid'])
 		self.entryStart = data['entryStart']
 		self.entryCount = data['entryCount']
 		self.entrySize = data['entrySize']
@@ -290,8 +290,7 @@ class GPT(object):
 			sbuf = buf[sliceAddr:sliceAddr+self.entrySize]
 			crc = crc32(sbuf, crc)
 			slice = GPTSlice(sbuf)
-			if slice.type != UUID(int=0):
-				self.slices.append(slice)
+			self.slices.append(slice)
 
 			sliceAddr+=self.entrySize
 
@@ -302,6 +301,8 @@ class GPT(object):
 
 		last = 0
 		for slice in self.slices:
+			if slice.type == UUID(int=0):
+				continue
 			if slice.startLBA <= last:
 				verbose("Note: slices are out of order in GPT")
 				self.ordered = False
