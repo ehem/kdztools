@@ -61,7 +61,7 @@ class GPTSlice(object):
 	# Generate the formatstring for struct.unpack()
 	_gpt_struct = Struct("<" + "".join([x for x in _gpt_slice_fmt.values()]))
 
-	def display(self):
+	def display(self, idx):
 		"""
 		Display the data for this slice of a GPT
 		"""
@@ -70,7 +70,7 @@ class GPTSlice(object):
 			verbose("Name: <empty entry>")
 			return None
 
-		verbose("Name: \"{:s}\" start={:d} end={:d} count={:d}".format(self.name, self.startLBA, self.endLBA, self.endLBA-self.startLBA+1))
+		verbose("Name({:d}): \"{:s}\" start={:d} end={:d} count={:d}".format(idx, self.name, self.startLBA, self.endLBA, self.endLBA-self.startLBA+1))
 		verbose("typ={:s} id={:s}".format(str(self.type), str(self.uuid)))
 
 	def __init__(self, buf):
@@ -155,12 +155,14 @@ class GPT(object):
 				verbose("Note: {:d} unused blocks between GPT header and entry table".format(self.myLBA-endEntry+1))
 
 		current = self.dataStartLBA
+		idx = 1
 		for slice in self.slices:
 			if slice.type != UUID(int=0):
 				if slice.startLBA != current:
 					verbose("Note: non-contiguous ({:d} unused)".format(slice.startLBA-current))
 				current = slice.endLBA + 1
-			slice.display()
+			slice.display(idx)
+			idx += 1
 		current-=1
 		if self.dataEndLBA != current:
 			verbose("Note: empty LBAs at end ({:d} unused)".format(self.dataEndLBA-current))
