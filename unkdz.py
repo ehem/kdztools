@@ -125,8 +125,8 @@ class KDZFileTools(kdz.KDZFile):
 		# Paranoia check for an updated file format
 		buf = self.infile.read(self.dataStart - self.headerEnd - 1)
 		if len(buf.lstrip(b'\x00')) > 0:
-			print("[!] Error: Data between headers and payload! (offsets {:d} to {:d})".format(self.headerEnd, self.dataStart), file=sys.stderr)
-			sys.exit(-1)
+			print("[!] Warning: Data between headers and payload! (offsets {:d} to {:d})".format(self.headerEnd, self.dataStart), file=sys.stderr)
+			self.hasExtra = True
 
 		# Make partition list
 		return [(x['name'],x['length']) for x in self.partitions]
@@ -168,6 +168,33 @@ class KDZFileTools(kdz.KDZFile):
 
 		# Close the file
 		outfile.close()
+
+	def saveExtra(self):
+		"""
+		Save the extra data that has appeared between headers&files
+		"""
+
+		if not self.hasExtra:
+			return
+
+		filename = os.path.join(self.outdir, "kdz_extras.bin")
+
+		extra = open(filename, "wb")
+
+		print("[+] Extracting extra data to " + filename)
+
+		self.infile.seek(self.headerEnd, os.SEEK_SET)
+
+		total = self.dataStart - self.headerEnd
+		while total > 0:
+			count = 4096 if 4096 < total else total
+
+			buf = self.infile.read(count)
+			extra.write(buf)
+
+			total -= count
+
+		extra.close()
 
 	def saveParams(self):
 		"""
@@ -246,6 +273,7 @@ class KDZFileTools(kdz.KDZFile):
 		for part in enumerate(self.partList):
 			print("[+] Extracting " + part[1][0].decode("utf8") + " to " + os.path.join(self.outdir,part[1][0].decode("utf8")))
 			self.extractPartition(part[0])
+		self.saveExtra()
 		self.saveParams()
 
 	def cmdListPartitions(self):
