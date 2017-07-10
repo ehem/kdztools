@@ -174,7 +174,10 @@ class KDZFileTools(kdz.KDZFile):
 		Save the extra data that has appeared between headers&files
 		"""
 
-		if not self.hasExtra:
+		try:
+			if not self.hasExtra:
+				return
+		except AttributeError:
 			return
 
 		filename = os.path.join(self.outdir, "kdz_extras.bin")
